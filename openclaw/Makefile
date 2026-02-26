@@ -4,7 +4,7 @@ run:
 	uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 db:
-	uv run python scripts/init_db.py
+	uv run python -m scripts.init_db
 
 fmt:
 	uv run black .

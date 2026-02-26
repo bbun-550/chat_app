@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from app.services.db import get_conn
 
@@ -6,8 +7,8 @@ DDL_PATH = os.getenv("OPENCLAW_DDL_PATH", "scripts/init_db.sql")
 
 
 def main() -> None:
-    db_path = os.getenv("OPENCLAW_DB_PATH", "database/app.db")
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    db_path = Path(os.getenv("OPENCLAW_DB_PATH", "database/app.db"))
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(DDL_PATH, "r", encoding="utf-8") as file:
         ddl = file.read()
