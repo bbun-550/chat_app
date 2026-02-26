@@ -3,23 +3,31 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.python-version
 
-# Env
+# Environment
 .env
 .venv/
 
 # Database
-database/*.db
-
-# OS
-.DS_Store
-
-# IDE
-.vscode/
-.cursor/
+**/database/*.db
+**/database/*.db-wal
+**/database/*.db-shm
 
 # Logs
 *.log
 
+# IDE
+.vscode/
+.idea/
+.cursor/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
 # 문서
 docs/
+workflow/
