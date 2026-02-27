@@ -30,7 +30,11 @@ def get_conversation(conversation_id: str):
 
 @router.patch("/{conversation_id}", response_model=ConversationResponse)
 def patch_conversation(conversation_id: str, req: UpdateConversationRequest):
-    conversation = store.update_conversation(conversation_id, req.title)
+    if req.title is None and req.category is None:
+        raise HTTPException(
+            status_code=400, detail="At least one field(title/category) is required"
+        )
+    conversation = store.update_conversation(conversation_id, req.title, req.category)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation

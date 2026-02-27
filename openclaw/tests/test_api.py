@@ -92,6 +92,20 @@ def test_chat_and_runs(client: TestClient):
     assert len(runs_res.json()) == 1
     assert runs_res.json()[0]["provider"] == "gemini"
 
+    messages = messages_res.json()
+    assistant_message_id = [m for m in messages if m["role"] == "assistant"][0]["id"]
+    meta_res = client.put(
+        f"/messages/{assistant_message_id}/meta",
+        json={
+            "task_type": "coding",
+            "quality_score": 5,
+            "teacher_rationale": "analyze then answer",
+            "is_rejected": 0,
+        },
+    )
+    assert meta_res.status_code == 200
+    assert meta_res.json()["quality_score"] == 5
+
 
 def test_export_endpoints(client: TestClient):
     conv_res = client.post("/conversations", json={"title": "export"})
@@ -117,9 +131,17 @@ def test_export_endpoints(client: TestClient):
     assert export_sft.status_code == 200
     assert isinstance(export_sft.json(), list)
 
+    export_kd = client.get(f"/export/{conversation_id}?format=kd")
+    assert export_kd.status_code == 200
+    assert isinstance(export_kd.json(), list)
+
     export_all = client.get("/export/all?format=sft")
     assert export_all.status_code == 200
     assert len(export_all.json()) >= 1
+
+    export_all_kd = client.get("/export/all?format=kd")
+    assert export_all_kd.status_code == 200
+    assert isinstance(export_all_kd.json(), list)
 
 
 def test_chat_with_missing_conversation_returns_404(client: TestClient):

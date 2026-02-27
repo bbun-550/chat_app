@@ -36,7 +36,10 @@ def export_all(format: str = Query("sft"), min_quality: int | None = Query(None)
                 data.extend(exported)
         return data
 
-    raise HTTPException(status_code=400, detail="format must be one of: json, sft")
+    if format == "kd":
+        return store.export_kd_examples(min_quality=min_quality)
+
+    raise HTTPException(status_code=400, detail="format must be one of: json, sft, kd")
 
 
 @router.get("/{conversation_id}")
@@ -49,4 +52,11 @@ def export_conversation(conversation_id: str, format: str = Query("json")):
         return store.export_conversation(conversation_id)
     if format == "sft":
         return store.export_sft(conversation_id)
-    raise HTTPException(status_code=400, detail="format must be one of: json, sft")
+    if format == "kd":
+        return store.export_kd_examples(conversation_id=conversation_id)
+    raise HTTPException(status_code=400, detail="format must be one of: json, sft, kd")
+
+
+@router.get("/all/sft")
+def export_all_sft(min_quality: int | None = Query(None)):
+    return export_all(format="sft", min_quality=min_quality)

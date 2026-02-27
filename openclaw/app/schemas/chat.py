@@ -15,7 +15,8 @@ class ConversationResponse(BaseModel):
 
 
 class UpdateConversationRequest(BaseModel):
-    title: str
+    title: Optional[str] = None
+    category: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
@@ -26,6 +27,9 @@ class ChatRequest(BaseModel):
     system_prompt_id: Optional[str] = None
     temperature: float = 0.7
     max_tokens: int = 2048
+    top_p: Optional[float] = None
+    top_k: Optional[int] = None
+    candidate_count: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
@@ -60,3 +64,15 @@ class ExportResponse(BaseModel):
     messages: list[dict[str, Any]]
     runs: list[dict[str, Any]]
     meta: list[dict[str, Any]]
+
+
+class UpsertMessageMetaRequest(BaseModel):
+    task_type: Optional[str] = None
+    quality_score: Optional[int] = None
+    tags: Optional[list[str]] = None
+    teacher_rationale: Optional[str] = None
+    rating_source: Optional[str] = None
+    is_rejected: Optional[int] = None
+    language: Optional[str] = None
+    safety_flags: Optional[list[str]] = None
+    notes: Optional[str] = None

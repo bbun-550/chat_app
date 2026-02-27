@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import ChatRequest, ChatResponse, UpsertMessageMetaRequest
 from app.services import store
 from app.services.llm_router import LLMRouter
 from app.services.providers.base import ChatMessage, LLMRequest
@@ -29,7 +29,7 @@ def send_message(req: ChatRequest):
             raise HTTPException(status_code=404, detail="System prompt not found")
         system_prompt_content = prompt["content"]
 
-    store.insert_message(req.conversation_id, "user", req.message)
+    user_message_id = store.insert_message(req.conversation_id, "user", req.message)
     history = store.get_messages(req.conversation_id)
     provider_messages = [ChatMessage(role=msg["role"], content=msg["content"]) for msg in history]
 
@@ -52,7 +52,7 @@ def send_message(req: ChatRequest):
     assistant_message_id = store.insert_message(
         req.conversation_id, "assistant", llm_res.reply_text
     )
-    store.insert_run(
+    run_id = store.insert_run(
         message_id=assistant_message_id,
         provider=llm_res.provider,
         model=llm_res.model,
@@ -65,7 +65,21 @@ def send_message(req: ChatRequest):
         latency_ms=llm_res.latency_ms,
         input_tokens=llm_res.input_tokens,
         output_tokens=llm_res.output_tokens,
+        top_p=req.top_p,
+        top_k=req.top_k,
+        candidate_count=req.candidate_count,
         raw=llm_res.raw,
+    )
+    store.upsert_kd_example(
+        conversation_id=req.conversation_id,
+        user_message_id=user_message_id,
+        assistant_message_id=assistant_message_id,
+        system_prompt=system_prompt_content,
+        prompt_text=req.message,
+        answer_text=llm_res.reply_text,
+        provider=llm_res.provider,
+        model=llm_res.model,
+        run_id=run_id,
     )
     store.touch_conversation(req.conversation_id)
 
@@ -82,3 +96,24 @@ def send_message(req: ChatRequest):
 @router.get("/runs")
 def list_runs(conversation_id: str | None = None):
     return store.list_runs(conversation_id)
+
+
+@router.put("/messages/{message_id}/meta")
+def upsert_message_meta(message_id: str, req: UpsertMessageMetaRequest):
+    message = store.get_message(message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    updated = store.upsert_message_meta(
+        message_id=message_id,
+        task_type=req.task_type,
+        quality_score=req.quality_score,
+        tags=req.tags,
+        teacher_rationale=req.teacher_rationale,
+        rating_source=req.rating_source,
+        is_rejected=req.is_rejected,
+        language=req.language,
+        safety_flags=req.safety_flags,
+        notes=req.notes,
+    )
+    store.sync_kd_example_labels(message_id)
+    return updated

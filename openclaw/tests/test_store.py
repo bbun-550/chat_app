@@ -21,7 +21,7 @@ def initialized_db(tmp_path, monkeypatch):
 
 
 def test_conversation_message_run_flow(initialized_db):
-    conversation = store.create_conversation("First")
+    conversation = store.create_conversation("First", category="coding")
     user_message_id = store.insert_message(conversation["id"], "user", "hello")
     assistant_message_id = store.insert_message(conversation["id"], "assistant", "hi")
 
@@ -45,6 +45,7 @@ def test_conversation_message_run_flow(initialized_db):
     runs = store.list_runs(conversation["id"])
     assert len(runs) == 1
     assert runs[0]["model"] == "gemini-2.0-flash"
+    assert store.get_conversation(conversation["id"])["category"] == "coding"
 
 
 def test_system_prompt_crud(initialized_db):
@@ -71,9 +72,11 @@ def test_export_and_meta(initialized_db):
         task_type="code_generation",
         quality_score=5,
         tags=["python", "api"],
+        teacher_rationale="step by step",
+        is_rejected=0,
         notes="good",
     )
-    store.insert_run(
+    run_id = store.insert_run(
         message_id=assistant_id,
         provider="gemini",
         model="gemini-2.0-flash",
@@ -84,6 +87,17 @@ def test_export_and_meta(initialized_db):
         input_tokens=32,
         output_tokens=64,
         raw=None,
+    )
+    store.upsert_kd_example(
+        conversation_id=conversation["id"],
+        user_message_id=store.get_messages(conversation["id"])[0]["id"],
+        assistant_message_id=assistant_id,
+        system_prompt="act as coder",
+        prompt_text="question",
+        answer_text="answer",
+        provider="gemini",
+        model="gemini-2.0-flash",
+        run_id=run_id,
     )
 
     exported = store.export_conversation(conversation["id"])
@@ -96,3 +110,6 @@ def test_export_and_meta(initialized_db):
     assert len(sft) == 1
     assert sft[0]["metadata"]["quality_score"] == 5
     assert sft[0]["metadata"]["task_type"] == "code_generation"
+    kd = store.export_kd_examples(conversation_id=conversation["id"], min_quality=4)
+    assert len(kd) == 1
+    assert kd[0]["teacher_rationale"] == "step by step"
