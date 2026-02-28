@@ -28,6 +28,11 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Xcode
+xcuserdata/
+*.xcuserstate
+
+
 # 문서
 docs/
 workflow/
