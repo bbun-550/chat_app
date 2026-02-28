@@ -35,4 +35,5 @@ xcuserdata/
 
 # 문서
 docs/
+*/*/*/docs/
 workflow/
