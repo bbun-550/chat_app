@@ -17,7 +17,7 @@ final class ChatViewModel: ObservableObject {
     @Published var lastOutputTokens = "-"
 
     @Published var provider = "gemini"
-    @Published var model = "gemini-2.0-flash"
+    @Published var model = "gemini-3-flash-preview"
     @Published var temperature: Double = 0.2
     @Published var maxTokens: Int = 512
     @Published var topP: Double? = nil
@@ -57,11 +57,13 @@ final class ChatViewModel: ObservableObject {
         isSending = true
         errorMessage = nil
 
+        let selectedModel = model.isEmpty ? "gemini-3-flash-preview" : model
         let localUser = Message(
             id: UUID().uuidString,
             conversation_id: cid,
             role: "user",
             content: text,
+            model: selectedModel,
             created_at: ISO8601DateFormatter().string(from: Date())
         )
         messages.append(localUser)
@@ -72,7 +74,7 @@ final class ChatViewModel: ObservableObject {
                 conversation_id: cid,
                 message: text,
                 provider: provider,
-                model: model.isEmpty ? nil : model,
+                model: selectedModel,
                 system_prompt_id: nil,
                 temperature: temperature,
                 max_tokens: maxTokens,
@@ -87,6 +89,7 @@ final class ChatViewModel: ObservableObject {
                 conversation_id: cid,
                 role: "assistant",
                 content: res.reply,
+                model: res.model,
                 created_at: ISO8601DateFormatter().string(from: Date())
             )
             messages.append(localAssistant)
