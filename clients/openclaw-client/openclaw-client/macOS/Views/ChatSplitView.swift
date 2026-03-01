@@ -39,16 +39,19 @@ struct ChatSplitView: View {
             }
         } detail: {
             VStack(spacing: 0) {
-                HStack {
-                    Text("Provider")
-                    TextField("provider", text: $chatVM.provider)
-                        .frame(width: 120)
-                    Text("Model")
-                    TextField("model", text: $chatVM.model)
-                        .frame(width: 220)
+                HStack(spacing: 12) {
+                    Picker("Model", selection: $chatVM.model) {
+                        Text("Flash").tag("gemini-3-flash-preview")
+                        Text("Pro").tag("gemini-2.5-pro")
+                        Text("Exp").tag("gemini-2.5-pro-exp-03-25")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 260)
+
                     Spacer()
+
                     if chatVM.isSending {
-                        ProgressView()
+                        ProgressView().controlSize(.small)
                     }
                 }
                 .padding()
@@ -59,12 +62,23 @@ struct ChatSplitView: View {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         ForEach(chatVM.messages) { message in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(message.role).font(.caption).foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    Text(message.role == "user" ? "You" : "Assistant")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if message.role == "assistant", let model = message.model {
+                                        Text(model)
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
                                 Text(message.content)
+                                    .textSelection(.enabled)
                                     .padding(10)
                                     .background(.thinMaterial)
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
+                            .frame(maxWidth: .infinity, alignment: message.role == "user" ? .trailing : .leading)
                         }
                     }
                     .padding()

@@ -6,11 +6,13 @@ struct MacSettingsView: View {
     var body: some View {
         Form {
             TextField("Base URL", text: $vm.serverURLText)
-            TextField("API Token (optional)", text: $vm.apiToken)
+                .autocorrectionDisabled()
+                .accessibilityLabel("Base URL")
             HStack {
                 Button("Save") {
                     vm.saveServerURL()
                 }
+                .keyboardShortcut(.defaultAction)
                 Button("Reset") {
                     vm.resetServerURL()
                 }
@@ -20,6 +22,6 @@ struct MacSettingsView: View {
             }
         }
         .padding()
-        .frame(minWidth: 420, minHeight: 180)
+        .frame(minWidth: 420, minHeight: 140)
     }
 }
