@@ -82,20 +82,20 @@ def touch_conversation(conversation_id: str) -> None:
 def get_messages(conversation_id: str) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, conversation_id, role, content, created_at "
+            "SELECT id, conversation_id, role, content, model, created_at "
             "FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
             (conversation_id,),
         ).fetchall()
     return [dict(row) for row in rows]
 
 
-def insert_message(conversation_id: str, role: str, content: str) -> str:
+def insert_message(conversation_id: str, role: str, content: str, model: str = "gemini-2.0-flash") -> str:
     message_id = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (message_id, conversation_id, role, content, now_iso()),
+            "INSERT INTO messages (id, conversation_id, role, content, model, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (message_id, conversation_id, role, content, model, now_iso()),
         )
     return message_id
 
@@ -103,7 +103,7 @@ def insert_message(conversation_id: str, role: str, content: str) -> str:
 def get_message(message_id: str) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id, conversation_id, role, content, created_at FROM messages WHERE id = ?",
+            "SELECT id, conversation_id, role, content, model, created_at FROM messages WHERE id = ?",
             (message_id,),
         ).fetchone()
     return dict(row) if row else None

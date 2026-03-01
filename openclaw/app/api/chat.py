@@ -29,7 +29,8 @@ def send_message(req: ChatRequest):
             raise HTTPException(status_code=404, detail="System prompt not found")
         system_prompt_content = prompt["content"]
 
-    user_message_id = store.insert_message(req.conversation_id, "user", req.message)
+    selected_model = req.model or "gemini-3-flash-preview"
+    user_message_id = store.insert_message(req.conversation_id, "user", req.message, selected_model)
     history = store.get_messages(req.conversation_id)
     provider_messages = [ChatMessage(role=msg["role"], content=msg["content"]) for msg in history]
 
@@ -50,7 +51,7 @@ def send_message(req: ChatRequest):
         raise HTTPException(status_code=500, detail=f"LLM provider error: {exc}") from exc
 
     assistant_message_id = store.insert_message(
-        req.conversation_id, "assistant", llm_res.reply_text
+        req.conversation_id, "assistant", llm_res.reply_text, llm_res.model
     )
     run_id = store.insert_run(
         message_id=assistant_message_id,
