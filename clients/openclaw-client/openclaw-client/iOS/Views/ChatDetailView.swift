@@ -9,25 +9,7 @@ struct ChatDetailView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(chatVM.messages) { message in
-                        let isUser = message.role == "user"
-                        VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(isUser ? "You" : "Assistant")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                if !isUser, let model = message.model {
-                                    Text(model)
-                                        .font(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                }
-                            }
-                            Text(message.content)
-                                .padding(10)
-                                .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
-                                .foregroundStyle(isUser ? Color.white : Color.primary)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+                        MessageBubbleView(message: message)
                     }
                 }
                 .padding()
@@ -93,3 +75,25 @@ struct ChatDetailView: View {
         }
     }
 }
+private struct MessageBubbleView: View {
+    let message: Message
+    
+    private var isUser: Bool {
+        message.role == "user"
+    }
+    
+    var body: some View {
+        VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+            Text(isUser ? "You" : "Assistant")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(message.content)
+                .padding(10)
+                .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
+                .foregroundStyle(isUser ? Color.white : Color.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+    }
+}
+

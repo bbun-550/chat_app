@@ -63,7 +63,6 @@ final class ChatViewModel: ObservableObject {
             conversation_id: cid,
             role: "user",
             content: text,
-            model: selectedModel,
             created_at: ISO8601DateFormatter().string(from: Date())
         )
         messages.append(localUser)
@@ -89,7 +88,6 @@ final class ChatViewModel: ObservableObject {
                 conversation_id: cid,
                 role: "assistant",
                 content: res.reply,
-                model: res.model,
                 created_at: ISO8601DateFormatter().string(from: Date())
             )
             messages.append(localAssistant)
