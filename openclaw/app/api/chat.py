@@ -37,7 +37,7 @@ def send_message(req: ChatRequest):
     llm_req = LLMRequest(
         messages=provider_messages,
         system_prompt=system_prompt_content,
-        model=req.model,
+        model=selected_model,
         temperature=req.temperature,
         max_tokens=req.max_tokens,
         metadata={"conversation_id": req.conversation_id},

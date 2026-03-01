@@ -7,7 +7,7 @@ from google.genai import types
 
 from app.services.providers.base import LLMRequest, LLMResponse
 
-DEFAULT_MODEL = "gemini-3.1-pro-preview"
+DEFAULT_MODEL = "gemini-3-flash-preview"
 
 
 class GeminiProvider:
