@@ -1,3 +1,11 @@
+"""Integration tests for app/services/store.py.
+
+Each test gets a fresh SQLite file via the `initialized_db` fixture, which:
+  1. Creates a temp file (tmp_path),
+  2. Applies the full schema from scripts/init_db.sql, and
+  3. Applies migration 002_add_model_to_messages.sql so the messages table
+     has the `model` column that store.insert_message() now requires.
+"""
 from pathlib import Path
 
 import pytest
@@ -5,19 +13,35 @@ import pytest
 from app.services import db as db_service
 from app.services import store
 
+MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "scripts" / "migrations"
+DDL_PATH = Path(__file__).resolve().parents[1] / "scripts" / "init_db.sql"
+
 
 @pytest.fixture()
 def initialized_db(tmp_path, monkeypatch):
+    """Set up a fresh temp SQLite DB with base schema + migration 002."""
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("OPENCLAW_DB_PATH", str(db_path))
-    db_service.DB_PATH = str(db_path)
+    # db_service.DB_PATH is read at module level; patch the attribute so
+    # get_conn() picks up the temp path for the duration of this test.
+    monkeypatch.setattr(db_service, "DB_PATH", str(db_path))
 
-    ddl_path = Path(__file__).resolve().parents[1] / "scripts" / "init_db.sql"
-    ddl = ddl_path.read_text(encoding="utf-8")
+    ddl = DDL_PATH.read_text(encoding="utf-8")
+    migration_002 = (MIGRATIONS_DIR / "002_add_model_to_messages.sql").read_text(
+        encoding="utf-8"
+    )
+
     with db_service.get_conn() as conn:
         conn.executescript(ddl)
+        # Apply migration that adds the `model` column to messages.
+        conn.executescript(migration_002)
 
     return db_path
+
+
+# ---------------------------------------------------------------------------
+# Existing integration tests (updated fixture handles migration 002)
+# ---------------------------------------------------------------------------
 
 
 def test_conversation_message_run_flow(initialized_db):
@@ -113,3 +137,73 @@ def test_export_and_meta(initialized_db):
     kd = store.export_kd_examples(conversation_id=conversation["id"], min_quality=4)
     assert len(kd) == 1
     assert kd[0]["teacher_rationale"] == "step by step"
+
+
+# ---------------------------------------------------------------------------
+# New tests for migration 002: model column on messages
+# ---------------------------------------------------------------------------
+
+
+def test_insert_message_saves_explicit_model(initialized_db):
+    """insert_message() persists the model name that is explicitly passed in."""
+    conversation = store.create_conversation("Model Test")
+    message_id = store.insert_message(
+        conversation["id"], "user", "ping", model="gemini-1.5-pro"
+    )
+
+    fetched = store.get_message(message_id)
+    assert fetched is not None
+    assert fetched["model"] == "gemini-1.5-pro"
+
+
+def test_insert_message_default_model(initialized_db):
+    """insert_message() uses 'gemini-2.0-flash' when model is not supplied.
+
+    The Python-level default in store.insert_message() is 'gemini-2.0-flash'.
+    Migration 002 sets the SQL column default to 'gemini-3-flash-preview', but
+    the Python default is always passed explicitly in the INSERT statement, so
+    the Python value wins.
+    """
+    conversation = store.create_conversation("Default Model Test")
+    message_id = store.insert_message(conversation["id"], "assistant", "pong")
+
+    fetched = store.get_message(message_id)
+    assert fetched is not None
+    assert fetched["model"] == "gemini-2.0-flash"
+
+
+def test_get_messages_returns_model_field(initialized_db):
+    """get_messages() includes the 'model' key in every returned dict."""
+    conversation = store.create_conversation("Get Messages Model Test")
+    store.insert_message(conversation["id"], "user", "hello", model="gemini-2.0-flash")
+    store.insert_message(
+        conversation["id"], "assistant", "world", model="gemini-1.5-pro"
+    )
+
+    messages = store.get_messages(conversation["id"])
+    assert len(messages) == 2
+
+    # Both messages must expose the model field.
+    for msg in messages:
+        assert "model" in msg, "model field missing from get_messages() result"
+
+    # Values must match what was inserted.
+    user_msg = next(m for m in messages if m["role"] == "user")
+    assistant_msg = next(m for m in messages if m["role"] == "assistant")
+    assert user_msg["model"] == "gemini-2.0-flash"
+    assert assistant_msg["model"] == "gemini-1.5-pro"
+
+
+def test_insert_message_model_persists_across_conversations(initialized_db):
+    """Model values are correctly scoped per message, not shared across conversations."""
+    conv_a = store.create_conversation("Conv A")
+    conv_b = store.create_conversation("Conv B")
+
+    store.insert_message(conv_a["id"], "user", "msg a", model="gemini-2.0-flash")
+    store.insert_message(conv_b["id"], "user", "msg b", model="gemini-1.5-pro")
+
+    msgs_a = store.get_messages(conv_a["id"])
+    msgs_b = store.get_messages(conv_b["id"])
+
+    assert msgs_a[0]["model"] == "gemini-2.0-flash"
+    assert msgs_b[0]["model"] == "gemini-1.5-pro"
