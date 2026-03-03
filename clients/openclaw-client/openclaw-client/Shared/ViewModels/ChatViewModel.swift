@@ -19,7 +19,7 @@ final class ChatViewModel: ObservableObject {
     @Published var provider = "gemini"
     @Published var model = "gemini-3-flash-preview"
     @Published var temperature: Double = 0.2
-    @Published var maxTokens: Int = 512
+    @Published var maxTokens: Int = 2048
     @Published var topP: Double? = nil
     @Published var topK: Int? = nil
     @Published var candidateCount: Int? = nil
