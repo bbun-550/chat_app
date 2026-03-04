@@ -7,6 +7,15 @@ final class ConversationViewModel: ObservableObject {
     @Published var selectedConversationId: String?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var searchText = ""
+
+    var filteredConversations: [Conversation] {
+        if searchText.isEmpty { return conversations }
+        return conversations.filter {
+            $0.title.localizedCaseInsensitiveContains(searchText)
+            || ($0.category ?? "").localizedCaseInsensitiveContains(searchText)
+        }
+    }
 
     func loadConversations() async {
         isLoading = true

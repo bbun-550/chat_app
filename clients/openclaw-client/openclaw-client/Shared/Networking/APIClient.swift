@@ -9,13 +9,13 @@ enum APIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Invalid URL"
+            return "서버 URL이 올바르지 않습니다. 설정을 확인해주세요."
         case .requestFailed:
-            return "Request failed"
+            return "서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
         case .decodingFailed:
-            return "Failed to decode response"
+            return "서버 응답을 처리할 수 없습니다."
         case .serverError(let code, let message):
-            return "Server error \(code): \(message)"
+            return "서버 오류 (\(code)): \(message)"
         }
     }
 }

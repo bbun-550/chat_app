@@ -10,7 +10,7 @@ struct ChatListView: View {
 
     var body: some View {
         NavigationStack {
-            List(convVM.conversations) { conversation in
+            List(convVM.filteredConversations) { conversation in
                 NavigationLink(value: conversation.id) {
                     VStack(alignment: .leading) {
                         Text(conversation.title)
@@ -39,6 +39,7 @@ struct ChatListView: View {
                 }
             }
             .navigationTitle("Chats")
+            .searchable(text: $convVM.searchText, prompt: "Search chats")
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button {
@@ -60,6 +61,14 @@ struct ChatListView: View {
             .overlay {
                 if convVM.isLoading {
                     ProgressView()
+                } else if convVM.filteredConversations.isEmpty && !convVM.searchText.isEmpty {
+                    ContentUnavailableView.search(text: convVM.searchText)
+                } else if convVM.conversations.isEmpty {
+                    ContentUnavailableView(
+                        "No Conversations",
+                        systemImage: "bubble.left.and.bubble.right",
+                        description: Text("Tap + to start a new chat")
+                    )
                 }
             }
             .alert("Error", isPresented: Binding(get: { convVM.errorMessage != nil }, set: { _ in convVM.errorMessage = nil })) {
