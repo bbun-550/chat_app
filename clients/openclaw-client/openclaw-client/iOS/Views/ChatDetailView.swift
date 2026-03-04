@@ -5,6 +5,7 @@ struct ChatDetailView: View {
     @StateObject private var chatVM = ChatViewModel()
     @State private var showScrollToBottomButton = false
     @State private var bottomAnchorMinY: CGFloat = .zero
+    @FocusState private var isInputFocused: Bool
 
     private let bottomAnchorID = "chat-detail-bottom-anchor"
 
@@ -32,6 +33,7 @@ struct ChatDetailView: View {
             await chatVM.loadMessages()
         }
         .alert("Error", isPresented: Binding(get: { chatVM.errorMessage != nil }, set: { _ in chatVM.errorMessage = nil })) {
+            Button("Retry") { Task { await chatVM.send() } }
             Button("OK", role: .cancel) {}
         } message: {
             Text(chatVM.errorMessage ?? "")
@@ -121,7 +123,9 @@ struct ChatDetailView: View {
                 TextField("Message...", text: $chatVM.inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...5)
+                    .focused($isInputFocused)
                 Button {
+                    isInputFocused = false
                     Task { await chatVM.send() }
                 } label: {
                     if chatVM.isSending {
@@ -183,10 +187,18 @@ private struct MessageBubbleView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(message.content)
+                .textSelection(.enabled)
                 .padding(10)
                 .background(isUser ? Color.accentColor : Color.secondary.opacity(0.16))
                 .foregroundStyle(isUser ? Color.white : Color.primary)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = message.content
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
