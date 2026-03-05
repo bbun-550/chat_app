@@ -1,9 +1,16 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.chat import ChatRequest, ChatResponse, UpsertMessageMetaRequest
 from app.services import store
 from app.services.llm_router import LLMRouter
+from app.services.llm.prompt_builder import build_prompt
+from app.services.memory.vector_store import extract_and_store_memories
+from app.services.memory.summarizer import auto_summarize_if_needed
 from app.services.providers.base import ChatMessage, LLMRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 _llm_router: LLMRouter | None = None
@@ -31,16 +38,14 @@ def send_message(req: ChatRequest):
 
     selected_model = req.model or "gemini-3-flash-preview"
     user_message_id = store.insert_message(req.conversation_id, "user", req.message, selected_model)
-    history = store.get_messages(req.conversation_id)
-    provider_messages = [ChatMessage(role=msg["role"], content=msg["content"]) for msg in history]
 
-    llm_req = LLMRequest(
-        messages=provider_messages,
+    llm_req = build_prompt(
+        conversation_id=req.conversation_id,
+        user_message=req.message,
         system_prompt=system_prompt_content,
         model=selected_model,
         temperature=req.temperature,
         max_tokens=req.max_tokens,
-        metadata={"conversation_id": req.conversation_id},
     )
 
     try:
@@ -83,6 +88,16 @@ def send_message(req: ChatRequest):
         run_id=run_id,
     )
     store.touch_conversation(req.conversation_id)
+
+    # Memory extraction (async-safe, non-blocking)
+    try:
+        router = get_llm_router()
+        llm_fn = lambda r: router.generate(req.provider, r)
+        messages = store.get_messages(req.conversation_id)
+        extract_and_store_memories(messages, req.conversation_id, llm_generate_fn=llm_fn)
+        auto_summarize_if_needed(req.conversation_id, llm_generate_fn=llm_fn)
+    except Exception as e:
+        logger.warning("Memory extraction failed (non-critical): %s", e)
 
     return ChatResponse(
         reply=llm_res.reply_text,
