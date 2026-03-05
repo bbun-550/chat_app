@@ -1,26 +1,30 @@
 import os
-import sqlite3
 from contextlib import contextmanager
 from typing import Iterator
 
-DB_PATH = os.getenv("OPENCLAW_DB_PATH", "database/app.db")
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.services.models import Base
 
-def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON;")
-    return conn
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/openclaw")
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
 @contextmanager
-def get_conn() -> Iterator[sqlite3.Connection]:
-    conn = connect()
+def get_session() -> Iterator[Session]:
+    session = SessionLocal()
     try:
-        yield conn
-        conn.commit()
+        yield session
+        session.commit()
     except Exception:
-        conn.rollback()
+        session.rollback()
         raise
     finally:
-        conn.close()
+        session.close()
+
+
+def create_all() -> None:
+    Base.metadata.create_all(bind=engine)

@@ -3,45 +3,145 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.services.db import get_conn
+from sqlalchemy import select, delete, update, and_, desc
+
+from app.services.db import get_session
+from app.services.models import (
+    Conversation,
+    Message,
+    SystemPrompt,
+    Run,
+    MessageMeta,
+    KDExample,
+    DailySummary,
+    VectorMemory,
+)
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _conv_to_dict(c: Conversation) -> dict:
+    return {
+        "id": c.id,
+        "title": c.title,
+        "category": c.category,
+        "created_at": c.created_at,
+        "updated_at": c.updated_at,
+    }
+
+
+def _msg_to_dict(m: Message) -> dict:
+    return {
+        "id": m.id,
+        "conversation_id": m.conversation_id,
+        "role": m.role,
+        "content": m.content,
+        "model": m.model,
+        "created_at": m.created_at,
+    }
+
+
+def _prompt_to_dict(p: SystemPrompt) -> dict:
+    return {
+        "id": p.id,
+        "name": p.name,
+        "content": p.content,
+        "created_at": p.created_at,
+        "updated_at": p.updated_at,
+    }
+
+
+def _run_to_dict(r: Run, conversation_id: Optional[str] = None) -> dict:
+    d = {
+        "id": r.id,
+        "message_id": r.message_id,
+        "provider": r.provider,
+        "model": r.model,
+        "system_prompt_id": r.system_prompt_id,
+        "system_prompt_content": r.system_prompt_content,
+        "params_json": r.params_json,
+        "latency_ms": r.latency_ms,
+        "input_tokens": r.input_tokens,
+        "output_tokens": r.output_tokens,
+        "top_p": r.top_p,
+        "top_k": r.top_k,
+        "candidate_count": r.candidate_count,
+        "raw_json": r.raw_json,
+        "created_at": r.created_at,
+    }
+    if conversation_id is not None:
+        d["conversation_id"] = conversation_id
+    return d
+
+
+def _meta_to_dict(mm: MessageMeta) -> dict:
+    return {
+        "message_id": mm.message_id,
+        "task_type": mm.task_type,
+        "quality_score": mm.quality_score,
+        "tags": mm.tags,
+        "teacher_rationale": mm.teacher_rationale,
+        "rating_source": mm.rating_source,
+        "is_rejected": mm.is_rejected,
+        "language": mm.language,
+        "safety_flags": mm.safety_flags,
+        "notes": mm.notes,
+    }
+
+
+def _kd_to_dict(k: KDExample) -> dict:
+    return {
+        "id": k.id,
+        "conversation_id": k.conversation_id,
+        "user_message_id": k.user_message_id,
+        "assistant_message_id": k.assistant_message_id,
+        "system_prompt": k.system_prompt,
+        "prompt_text": k.prompt_text,
+        "teacher_rationale": k.teacher_rationale,
+        "answer_text": k.answer_text,
+        "category": k.category,
+        "quality_score": k.quality_score,
+        "task_type": k.task_type,
+        "is_rejected": k.is_rejected,
+        "provider": k.provider,
+        "model": k.model,
+        "run_id": k.run_id,
+        "dataset_version": k.dataset_version,
+        "created_at": k.created_at,
+    }
+
+
+# ── Conversations ──
+
+
 def create_conversation(title: str = "New Chat", category: Optional[str] = None) -> dict:
     conversation_id = str(uuid.uuid4())
     now = now_iso()
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO conversations (id, title, category, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (conversation_id, title, category, now, now),
-        )
+    with get_session() as s:
+        s.add(Conversation(
+            id=conversation_id, title=title, category=category,
+            created_at=now, updated_at=now,
+        ))
     return {
-        "id": conversation_id,
-        "title": title,
-        "category": category,
-        "created_at": now,
-        "updated_at": now,
+        "id": conversation_id, "title": title, "category": category,
+        "created_at": now, "updated_at": now,
     }
 
 
 def list_conversations() -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT id, title, category, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
-        ).fetchall()
-    return [dict(row) for row in rows]
+    with get_session() as s:
+        rows = s.execute(
+            select(Conversation).order_by(desc(Conversation.updated_at))
+        ).scalars().all()
+        return [_conv_to_dict(r) for r in rows]
 
 
 def get_conversation(conversation_id: str) -> Optional[dict]:
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT id, title, category, created_at, updated_at FROM conversations WHERE id = ?",
-            (conversation_id,),
-        ).fetchone()
-    return dict(row) if row else None
+    with get_session() as s:
+        c = s.get(Conversation, conversation_id)
+        return _conv_to_dict(c) if c else None
 
 
 def update_conversation(
@@ -49,115 +149,109 @@ def update_conversation(
 ) -> Optional[dict]:
     if title is None and category is None:
         return get_conversation(conversation_id)
-    updates = []
-    args: list = []
+    values: dict = {"updated_at": now_iso()}
     if title is not None:
-        updates.append("title = ?")
-        args.append(title)
+        values["title"] = title
     if category is not None:
-        updates.append("category = ?")
-        args.append(category)
-    updates.append("updated_at = ?")
-    args.append(now_iso())
-    args.append(conversation_id)
-    with get_conn() as conn:
-        conn.execute(f"UPDATE conversations SET {', '.join(updates)} WHERE id = ?", tuple(args))
+        values["category"] = category
+    with get_session() as s:
+        s.execute(
+            update(Conversation).where(Conversation.id == conversation_id).values(**values)
+        )
     return get_conversation(conversation_id)
 
 
 def delete_conversation(conversation_id: str) -> bool:
-    with get_conn() as conn:
-        cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
-    return cursor.rowcount > 0
+    with get_session() as s:
+        result = s.execute(
+            delete(Conversation).where(Conversation.id == conversation_id)
+        )
+        return result.rowcount > 0
 
 
 def touch_conversation(conversation_id: str) -> None:
-    with get_conn() as conn:
-        conn.execute(
-            "UPDATE conversations SET updated_at = ? WHERE id = ?",
-            (now_iso(), conversation_id),
+    with get_session() as s:
+        s.execute(
+            update(Conversation).where(Conversation.id == conversation_id)
+            .values(updated_at=now_iso())
         )
 
 
+# ── Messages ──
+
+
 def get_messages(conversation_id: str) -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT id, conversation_id, role, content, model, created_at "
-            "FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
-            (conversation_id,),
-        ).fetchall()
-    return [dict(row) for row in rows]
+    with get_session() as s:
+        rows = s.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at)
+        ).scalars().all()
+        return [_msg_to_dict(r) for r in rows]
 
 
 def insert_message(conversation_id: str, role: str, content: str, model: str = "gemini-2.0-flash") -> str:
     message_id = str(uuid.uuid4())
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, model, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (message_id, conversation_id, role, content, model, now_iso()),
-        )
+    with get_session() as s:
+        s.add(Message(
+            id=message_id, conversation_id=conversation_id,
+            role=role, content=content, model=model, created_at=now_iso(),
+        ))
     return message_id
 
 
 def get_message(message_id: str) -> Optional[dict]:
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT id, conversation_id, role, content, model, created_at FROM messages WHERE id = ?",
-            (message_id,),
-        ).fetchone()
-    return dict(row) if row else None
+    with get_session() as s:
+        m = s.get(Message, message_id)
+        return _msg_to_dict(m) if m else None
+
+
+# ── System Prompts ──
 
 
 def create_system_prompt(name: str, content: str) -> dict:
     prompt_id = str(uuid.uuid4())
     now = now_iso()
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO system_prompts (id, name, content, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (prompt_id, name, content, now, now),
-        )
-    return {
-        "id": prompt_id,
-        "name": name,
-        "content": content,
-        "created_at": now,
-        "updated_at": now,
-    }
+    with get_session() as s:
+        s.add(SystemPrompt(
+            id=prompt_id, name=name, content=content,
+            created_at=now, updated_at=now,
+        ))
+    return {"id": prompt_id, "name": name, "content": content, "created_at": now, "updated_at": now}
 
 
 def list_system_prompts() -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT id, name, content, created_at, updated_at FROM system_prompts "
-            "ORDER BY updated_at DESC"
-        ).fetchall()
-    return [dict(row) for row in rows]
+    with get_session() as s:
+        rows = s.execute(
+            select(SystemPrompt).order_by(desc(SystemPrompt.updated_at))
+        ).scalars().all()
+        return [_prompt_to_dict(r) for r in rows]
 
 
 def get_system_prompt(prompt_id: str) -> Optional[dict]:
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT id, name, content, created_at, updated_at FROM system_prompts WHERE id = ?",
-            (prompt_id,),
-        ).fetchone()
-    return dict(row) if row else None
+    with get_session() as s:
+        p = s.get(SystemPrompt, prompt_id)
+        return _prompt_to_dict(p) if p else None
 
 
 def update_system_prompt(prompt_id: str, name: str, content: str) -> Optional[dict]:
-    with get_conn() as conn:
-        conn.execute(
-            "UPDATE system_prompts SET name = ?, content = ?, updated_at = ? WHERE id = ?",
-            (name, content, now_iso(), prompt_id),
+    with get_session() as s:
+        s.execute(
+            update(SystemPrompt).where(SystemPrompt.id == prompt_id)
+            .values(name=name, content=content, updated_at=now_iso())
         )
     return get_system_prompt(prompt_id)
 
 
 def delete_system_prompt(prompt_id: str) -> bool:
-    with get_conn() as conn:
-        cursor = conn.execute("DELETE FROM system_prompts WHERE id = ?", (prompt_id,))
-    return cursor.rowcount > 0
+    with get_session() as s:
+        result = s.execute(
+            delete(SystemPrompt).where(SystemPrompt.id == prompt_id)
+        )
+        return result.rowcount > 0
+
+
+# ── Runs ──
 
 
 def insert_run(
@@ -176,43 +270,38 @@ def insert_run(
     raw: Optional[dict] = None,
 ) -> str:
     run_id = str(uuid.uuid4())
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO runs ("
-            "id, message_id, provider, model, system_prompt_id, system_prompt_content, "
-            "params_json, latency_ms, input_tokens, output_tokens, top_p, top_k, candidate_count, raw_json, created_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                run_id,
-                message_id,
-                provider,
-                model,
-                system_prompt_id,
-                system_prompt_content,
-                json.dumps(params, ensure_ascii=False),
-                latency_ms,
-                input_tokens,
-                output_tokens,
-                top_p,
-                top_k,
-                candidate_count,
-                json.dumps(raw, ensure_ascii=False) if raw else None,
-                now_iso(),
-            ),
-        )
+    with get_session() as s:
+        s.add(Run(
+            id=run_id,
+            message_id=message_id,
+            provider=provider,
+            model=model,
+            system_prompt_id=system_prompt_id,
+            system_prompt_content=system_prompt_content,
+            params_json=json.dumps(params, ensure_ascii=False),
+            latency_ms=latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            top_p=top_p,
+            top_k=top_k,
+            candidate_count=candidate_count,
+            raw_json=json.dumps(raw, ensure_ascii=False) if raw else None,
+            created_at=now_iso(),
+        ))
     return run_id
 
 
 def list_runs(conversation_id: Optional[str] = None) -> list[dict]:
-    query = "SELECT r.*, m.conversation_id FROM runs r JOIN messages m ON r.message_id = m.id "
-    args: tuple = ()
-    if conversation_id:
-        query += "WHERE m.conversation_id = ? "
-        args = (conversation_id,)
-    query += "ORDER BY r.created_at DESC"
-    with get_conn() as conn:
-        rows = conn.execute(query, args).fetchall()
-    return [dict(row) for row in rows]
+    with get_session() as s:
+        stmt = select(Run, Message.conversation_id).join(Message, Run.message_id == Message.id)
+        if conversation_id:
+            stmt = stmt.where(Message.conversation_id == conversation_id)
+        stmt = stmt.order_by(desc(Run.created_at))
+        rows = s.execute(stmt).all()
+        return [_run_to_dict(run, conv_id) for run, conv_id in rows]
+
+
+# ── Message Meta ──
 
 
 def upsert_message_meta(
@@ -229,41 +318,60 @@ def upsert_message_meta(
 ) -> dict:
     tags_json = json.dumps(tags, ensure_ascii=False) if tags else None
     safety_flags_json = json.dumps(safety_flags, ensure_ascii=False) if safety_flags else None
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO message_meta ("
-            "message_id, task_type, quality_score, tags, teacher_rationale, rating_source, "
-            "is_rejected, language, safety_flags, notes"
-            ") VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, ?, ?) "
-            "ON CONFLICT(message_id) DO UPDATE SET "
-            "task_type = COALESCE(excluded.task_type, task_type), "
-            "quality_score = COALESCE(excluded.quality_score, quality_score), "
-            "tags = COALESCE(excluded.tags, tags), "
-            "teacher_rationale = COALESCE(excluded.teacher_rationale, teacher_rationale), "
-            "rating_source = COALESCE(excluded.rating_source, rating_source), "
-            "is_rejected = COALESCE(excluded.is_rejected, is_rejected), "
-            "language = COALESCE(excluded.language, language), "
-            "safety_flags = COALESCE(excluded.safety_flags, safety_flags), "
-            "notes = COALESCE(excluded.notes, notes)",
-            (
-                message_id,
-                task_type,
-                quality_score,
-                tags_json,
-                teacher_rationale,
-                rating_source,
-                is_rejected,
-                language,
-                safety_flags_json,
-                notes,
-            ),
-        )
-        row = conn.execute(
-            "SELECT message_id, task_type, quality_score, teacher_rationale, is_rejected "
-            "FROM message_meta WHERE message_id = ?",
-            (message_id,),
-        ).fetchone()
-    return dict(row)
+    with get_session() as s:
+        existing = s.get(MessageMeta, message_id)
+        if existing:
+            if task_type is not None:
+                existing.task_type = task_type
+            if quality_score is not None:
+                existing.quality_score = quality_score
+            if tags_json is not None:
+                existing.tags = tags_json
+            if teacher_rationale is not None:
+                existing.teacher_rationale = teacher_rationale
+            if rating_source is not None:
+                existing.rating_source = rating_source
+            if is_rejected is not None:
+                existing.is_rejected = is_rejected
+            if language is not None:
+                existing.language = language
+            if safety_flags_json is not None:
+                existing.safety_flags = safety_flags_json
+            if notes is not None:
+                existing.notes = notes
+            s.flush()
+            return {
+                "message_id": existing.message_id,
+                "task_type": existing.task_type,
+                "quality_score": existing.quality_score,
+                "teacher_rationale": existing.teacher_rationale,
+                "is_rejected": existing.is_rejected,
+            }
+        else:
+            mm = MessageMeta(
+                message_id=message_id,
+                task_type=task_type,
+                quality_score=quality_score,
+                tags=tags_json,
+                teacher_rationale=teacher_rationale,
+                rating_source=rating_source,
+                is_rejected=is_rejected if is_rejected is not None else 0,
+                language=language,
+                safety_flags=safety_flags_json,
+                notes=notes,
+            )
+            s.add(mm)
+            s.flush()
+            return {
+                "message_id": mm.message_id,
+                "task_type": mm.task_type,
+                "quality_score": mm.quality_score,
+                "teacher_rationale": mm.teacher_rationale,
+                "is_rejected": mm.is_rejected,
+            }
+
+
+# ── KD Examples ──
 
 
 def upsert_kd_example(
@@ -281,74 +389,74 @@ def upsert_kd_example(
     kd_id = str(uuid.uuid4())
     meta = get_message_meta_by_message_id(assistant_message_id)
     conversation = get_conversation(conversation_id)
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO kd_examples ("
-            "id, conversation_id, user_message_id, assistant_message_id, system_prompt, "
-            "prompt_text, teacher_rationale, answer_text, category, quality_score, task_type, "
-            "is_rejected, provider, model, run_id, dataset_version, created_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(assistant_message_id) DO UPDATE SET "
-            "system_prompt = excluded.system_prompt, "
-            "prompt_text = excluded.prompt_text, "
-            "teacher_rationale = COALESCE(excluded.teacher_rationale, kd_examples.teacher_rationale), "
-            "answer_text = excluded.answer_text, "
-            "category = excluded.category, "
-            "quality_score = COALESCE(excluded.quality_score, kd_examples.quality_score), "
-            "task_type = COALESCE(excluded.task_type, kd_examples.task_type), "
-            "is_rejected = excluded.is_rejected, "
-            "provider = excluded.provider, "
-            "model = excluded.model, "
-            "run_id = excluded.run_id, "
-            "dataset_version = excluded.dataset_version",
-            (
-                kd_id,
-                conversation_id,
-                user_message_id,
-                assistant_message_id,
-                system_prompt,
-                prompt_text,
-                meta.get("teacher_rationale"),
-                answer_text,
-                conversation.get("category") if conversation else None,
-                meta.get("quality_score"),
-                meta.get("task_type"),
-                int(meta.get("is_rejected") or 0),
-                provider,
-                model,
-                run_id,
-                dataset_version,
-                now_iso(),
-            ),
-        )
-    return kd_id
+    with get_session() as s:
+        existing = s.execute(
+            select(KDExample).where(KDExample.assistant_message_id == assistant_message_id)
+        ).scalar_one_or_none()
+        if existing:
+            existing.system_prompt = system_prompt
+            existing.prompt_text = prompt_text
+            if meta.get("teacher_rationale"):
+                existing.teacher_rationale = meta["teacher_rationale"]
+            existing.answer_text = answer_text
+            existing.category = conversation.get("category") if conversation else None
+            if meta.get("quality_score") is not None:
+                existing.quality_score = meta["quality_score"]
+            if meta.get("task_type"):
+                existing.task_type = meta["task_type"]
+            existing.is_rejected = int(meta.get("is_rejected") or 0)
+            existing.provider = provider
+            existing.model = model
+            existing.run_id = run_id
+            existing.dataset_version = dataset_version
+            return existing.id
+        else:
+            s.add(KDExample(
+                id=kd_id,
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                assistant_message_id=assistant_message_id,
+                system_prompt=system_prompt,
+                prompt_text=prompt_text,
+                teacher_rationale=meta.get("teacher_rationale"),
+                answer_text=answer_text,
+                category=conversation.get("category") if conversation else None,
+                quality_score=meta.get("quality_score"),
+                task_type=meta.get("task_type"),
+                is_rejected=int(meta.get("is_rejected") or 0),
+                provider=provider,
+                model=model,
+                run_id=run_id,
+                dataset_version=dataset_version,
+                created_at=now_iso(),
+            ))
+            return kd_id
 
 
 def get_message_meta_by_message_id(message_id: str) -> dict:
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM message_meta WHERE message_id = ?", (message_id,)
-        ).fetchone()
-    return dict(row) if row else {}
+    with get_session() as s:
+        mm = s.get(MessageMeta, message_id)
+        return _meta_to_dict(mm) if mm else {}
 
 
 def sync_kd_example_labels(assistant_message_id: str) -> None:
     meta = get_message_meta_by_message_id(assistant_message_id)
-    with get_conn() as conn:
-        conn.execute(
-            "UPDATE kd_examples SET "
-            "teacher_rationale = COALESCE(?, teacher_rationale), "
-            "quality_score = COALESCE(?, quality_score), "
-            "task_type = COALESCE(?, task_type), "
-            "is_rejected = COALESCE(?, is_rejected) "
-            "WHERE assistant_message_id = ?",
-            (
-                meta.get("teacher_rationale"),
-                meta.get("quality_score"),
-                meta.get("task_type"),
-                meta.get("is_rejected"),
-                assistant_message_id,
-            ),
+    values: dict = {}
+    if meta.get("teacher_rationale") is not None:
+        values["teacher_rationale"] = meta["teacher_rationale"]
+    if meta.get("quality_score") is not None:
+        values["quality_score"] = meta["quality_score"]
+    if meta.get("task_type") is not None:
+        values["task_type"] = meta["task_type"]
+    if meta.get("is_rejected") is not None:
+        values["is_rejected"] = meta["is_rejected"]
+    if not values:
+        return
+    with get_session() as s:
+        s.execute(
+            update(KDExample)
+            .where(KDExample.assistant_message_id == assistant_message_id)
+            .values(**values)
         )
 
 
@@ -357,20 +465,20 @@ def list_kd_examples(
     category: Optional[str] = None,
     exclude_rejected: bool = True,
 ) -> list[dict]:
-    query = "SELECT * FROM kd_examples WHERE 1=1 "
-    args: list = []
-    if min_quality is not None:
-        query += "AND quality_score >= ? "
-        args.append(min_quality)
-    if category:
-        query += "AND category = ? "
-        args.append(category)
-    if exclude_rejected:
-        query += "AND is_rejected = 0 "
-    query += "ORDER BY created_at DESC"
-    with get_conn() as conn:
-        rows = conn.execute(query, tuple(args)).fetchall()
-    return [dict(row) for row in rows]
+    with get_session() as s:
+        stmt = select(KDExample)
+        conditions = []
+        if min_quality is not None:
+            conditions.append(KDExample.quality_score >= min_quality)
+        if category:
+            conditions.append(KDExample.category == category)
+        if exclude_rejected:
+            conditions.append(KDExample.is_rejected == 0)
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+        stmt = stmt.order_by(desc(KDExample.created_at))
+        rows = s.execute(stmt).scalars().all()
+        return [_kd_to_dict(r) for r in rows]
 
 
 def export_kd_examples(
@@ -379,34 +487,36 @@ def export_kd_examples(
     category: Optional[str] = None,
     exclude_rejected: bool = True,
 ) -> list[dict]:
-    query = "SELECT * FROM kd_examples WHERE 1=1 "
-    args: list = []
-    if conversation_id:
-        query += "AND conversation_id = ? "
-        args.append(conversation_id)
-    if min_quality is not None:
-        query += "AND quality_score >= ? "
-        args.append(min_quality)
-    if category:
-        query += "AND category = ? "
-        args.append(category)
-    if exclude_rejected:
-        query += "AND is_rejected = 0 "
-    query += "ORDER BY created_at DESC"
-    with get_conn() as conn:
-        rows = conn.execute(query, tuple(args)).fetchall()
-    return [dict(row) for row in rows]
+    with get_session() as s:
+        stmt = select(KDExample)
+        conditions = []
+        if conversation_id:
+            conditions.append(KDExample.conversation_id == conversation_id)
+        if min_quality is not None:
+            conditions.append(KDExample.quality_score >= min_quality)
+        if category:
+            conditions.append(KDExample.category == category)
+        if exclude_rejected:
+            conditions.append(KDExample.is_rejected == 0)
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+        stmt = stmt.order_by(desc(KDExample.created_at))
+        rows = s.execute(stmt).scalars().all()
+        return [_kd_to_dict(r) for r in rows]
 
 
 def get_message_meta(conversation_id: str) -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT mm.* FROM message_meta mm "
-            "JOIN messages m ON mm.message_id = m.id "
-            "WHERE m.conversation_id = ?",
-            (conversation_id,),
-        ).fetchall()
-    return [dict(row) for row in rows]
+    with get_session() as s:
+        stmt = (
+            select(MessageMeta)
+            .join(Message, MessageMeta.message_id == Message.id)
+            .where(Message.conversation_id == conversation_id)
+        )
+        rows = s.execute(stmt).scalars().all()
+        return [_meta_to_dict(r) for r in rows]
+
+
+# ── Export ──
 
 
 def export_conversation(conversation_id: str) -> dict:
@@ -458,3 +568,88 @@ def export_sft(conversation_id: str) -> list[dict]:
             },
         }
     ]
+
+
+# ── Daily Summaries (new) ──
+
+
+def insert_daily_summary(
+    conversation_id: Optional[str], summary_text: str, fact_count: int = 0
+) -> str:
+    summary_id = str(uuid.uuid4())
+    with get_session() as s:
+        s.add(DailySummary(
+            id=summary_id,
+            conversation_id=conversation_id,
+            summary_text=summary_text,
+            fact_count=fact_count,
+            created_at=now_iso(),
+        ))
+    return summary_id
+
+
+def get_daily_summaries(limit: int = 10) -> list[dict]:
+    with get_session() as s:
+        rows = s.execute(
+            select(DailySummary).order_by(desc(DailySummary.created_at)).limit(limit)
+        ).scalars().all()
+        return [
+            {
+                "id": r.id,
+                "conversation_id": r.conversation_id,
+                "summary_text": r.summary_text,
+                "fact_count": r.fact_count,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ]
+
+
+def get_latest_daily_summary() -> Optional[dict]:
+    summaries = get_daily_summaries(limit=1)
+    return summaries[0] if summaries else None
+
+
+# ── Vector Memories (new) ──
+
+
+def insert_vector_memory(
+    content: str, embedding: list[float], memory_type: str = "fact",
+    source_conversation_id: Optional[str] = None,
+) -> str:
+    memory_id = str(uuid.uuid4())
+    with get_session() as s:
+        s.add(VectorMemory(
+            id=memory_id,
+            content=content,
+            embedding=embedding,
+            memory_type=memory_type,
+            source_conversation_id=source_conversation_id,
+            created_at=now_iso(),
+        ))
+    return memory_id
+
+
+def search_vector_memories(
+    embedding: list[float], limit: int = 5, threshold: float = 0.7
+) -> list[dict]:
+    with get_session() as s:
+        distance = VectorMemory.embedding.cosine_distance(embedding)
+        stmt = (
+            select(VectorMemory, distance.label("distance"))
+            .where(distance < (1 - threshold))
+            .order_by(distance)
+            .limit(limit)
+        )
+        rows = s.execute(stmt).all()
+        return [
+            {
+                "id": vm.id,
+                "content": vm.content,
+                "memory_type": vm.memory_type,
+                "source_conversation_id": vm.source_conversation_id,
+                "created_at": vm.created_at,
+                "similarity": 1 - dist,
+            }
+            for vm, dist in rows
+        ]
