@@ -1,12 +1,23 @@
+import logging
+
 from app.services.providers.base import LLMProvider, LLMRequest, LLMResponse
 from app.services.providers.gemini import GeminiProvider
+
+logger = logging.getLogger(__name__)
 
 
 class LLMRouter:
     def __init__(self) -> None:
-        self.providers: dict[str, LLMProvider] = {
-            "gemini": GeminiProvider(),
-        }
+        self.providers: dict[str, LLMProvider] = {}
+        try:
+            self.providers["gemini"] = GeminiProvider()
+        except Exception as e:
+            logger.warning("Gemini provider unavailable: %s", e)
+        try:
+            from app.services.providers.ollama import OllamaProvider
+            self.providers["ollama"] = OllamaProvider()
+        except Exception as e:
+            logger.warning("Ollama provider unavailable: %s", e)
 
     def list_providers(self) -> list[str]:
         return list(self.providers.keys())
