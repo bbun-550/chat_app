@@ -7,6 +7,8 @@ from sqlalchemy import select, delete, update, and_, desc
 
 from app.services.db import get_session
 from app.services.models import (
+    AgentLog,
+    AgentStep,
     Conversation,
     Message,
     SystemPrompt,
@@ -653,3 +655,143 @@ def search_vector_memories(
             }
             for vm, dist in rows
         ]
+
+
+# ── Agent Logs ──
+
+
+def _agent_log_to_dict(r: AgentLog) -> dict:
+    return {
+        "id": r.id,
+        "plan_id": r.plan_id,
+        "conversation_id": r.conversation_id,
+        "intent": r.intent,
+        "plan_json": r.plan_json,
+        "overall_risk": r.overall_risk,
+        "status": r.status,
+        "provider": r.provider,
+        "model": r.model,
+        "created_at": r.created_at,
+        "completed_at": r.completed_at,
+    }
+
+
+def _agent_step_to_dict(r: AgentStep) -> dict:
+    return {
+        "id": r.id,
+        "agent_log_id": r.agent_log_id,
+        "step_index": r.step_index,
+        "tool_name": r.tool_name,
+        "args_json": r.args_json,
+        "risk_level": r.risk_level,
+        "approval": r.approval,
+        "description": r.description,
+        "success": r.success,
+        "output_json": r.output_json,
+        "error": r.error,
+        "duration_ms": r.duration_ms,
+        "created_at": r.created_at,
+    }
+
+
+def insert_agent_log(
+    plan_id: str,
+    conversation_id: str,
+    intent: str,
+    plan_json: str,
+    overall_risk: str,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> str:
+    log_id = str(uuid.uuid4())
+    with get_session() as s:
+        s.add(AgentLog(
+            id=log_id,
+            plan_id=plan_id,
+            conversation_id=conversation_id,
+            intent=intent,
+            plan_json=plan_json,
+            overall_risk=overall_risk,
+            status="pending",
+            provider=provider,
+            model=model,
+            created_at=now_iso(),
+        ))
+    return log_id
+
+
+def get_agent_log_by_plan_id(plan_id: str) -> Optional[dict]:
+    with get_session() as s:
+        row = s.execute(
+            select(AgentLog).where(AgentLog.plan_id == plan_id)
+        ).scalar_one_or_none()
+        return _agent_log_to_dict(row) if row else None
+
+
+def update_agent_log_status(plan_id: str, status: str) -> None:
+    values: dict = {"status": status}
+    if status in ("completed", "failed"):
+        values["completed_at"] = now_iso()
+    with get_session() as s:
+        s.execute(
+            update(AgentLog).where(AgentLog.plan_id == plan_id).values(**values)
+        )
+
+
+def list_agent_logs(conversation_id: Optional[str] = None, limit: int = 50) -> list[dict]:
+    with get_session() as s:
+        stmt = select(AgentLog).order_by(desc(AgentLog.created_at)).limit(limit)
+        if conversation_id:
+            stmt = stmt.where(AgentLog.conversation_id == conversation_id)
+        rows = s.execute(stmt).scalars().all()
+        return [_agent_log_to_dict(r) for r in rows]
+
+
+def insert_agent_step(
+    agent_log_id: str,
+    step_index: int,
+    tool_name: str,
+    args_json: str,
+    risk_level: str,
+    approval: str,
+    description: str = "",
+) -> str:
+    step_id = str(uuid.uuid4())
+    with get_session() as s:
+        s.add(AgentStep(
+            id=step_id,
+            agent_log_id=agent_log_id,
+            step_index=step_index,
+            tool_name=tool_name,
+            args_json=args_json,
+            risk_level=risk_level,
+            approval=approval,
+            description=description,
+            created_at=now_iso(),
+        ))
+    return step_id
+
+
+def update_agent_step_result(
+    step_id: str, success: bool, output_json: Optional[str] = None,
+    error: Optional[str] = None, duration_ms: int = 0,
+) -> None:
+    with get_session() as s:
+        s.execute(
+            update(AgentStep).where(AgentStep.id == step_id).values(
+                success=1 if success else 0,
+                output_json=output_json,
+                error=error,
+                duration_ms=duration_ms,
+            )
+        )
+
+
+def get_agent_steps(agent_log_id: str) -> list[dict]:
+    with get_session() as s:
+        rows = s.execute(
+            select(AgentStep)
+            .where(AgentStep.agent_log_id == agent_log_id)
+            .order_by(AgentStep.step_index)
+        ).scalars().all()
+        return [_agent_step_to_dict(r) for r in rows]

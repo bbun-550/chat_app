@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.api import chat, conversations, export, system_prompts
+from app.api import agent, chat, conversations, export, system_prompts
 
 load_dotenv()
 
@@ -22,6 +22,7 @@ app.include_router(conversations.router)
 app.include_router(system_prompts.router)
 app.include_router(chat.router)
 app.include_router(export.router)
+app.include_router(agent.router)
 
 
 @app.get("/health")

@@ -137,3 +137,54 @@ class VectorMemory(Base):
     created_at = Column(Text, nullable=False)
 
     __table_args__ = (Index("idx_vector_memories_type", "memory_type", created_at.desc()),)
+
+
+class AgentLog(Base):
+    __tablename__ = "agent_logs"
+
+    id = Column(Text, primary_key=True)
+    plan_id = Column(Text, nullable=False, unique=True)
+    conversation_id = Column(Text, ForeignKey("conversations.id", ondelete="SET NULL"))
+    intent = Column(Text, nullable=False)
+    plan_json = Column(Text, nullable=False)
+    overall_risk = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="pending")
+    provider = Column(Text)
+    model = Column(Text)
+    created_at = Column(Text, nullable=False)
+    completed_at = Column(Text)
+
+    steps = relationship("AgentStep", back_populates="agent_log", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint("overall_risk IN ('LOW', 'MEDIUM', 'HIGH')"),
+        CheckConstraint("status IN ('pending', 'executing', 'completed', 'failed')"),
+        Index("idx_agent_logs_conv", "conversation_id"),
+        Index("idx_agent_logs_plan", "plan_id"),
+    )
+
+
+class AgentStep(Base):
+    __tablename__ = "agent_steps"
+
+    id = Column(Text, primary_key=True)
+    agent_log_id = Column(Text, ForeignKey("agent_logs.id", ondelete="CASCADE"), nullable=False)
+    step_index = Column(Integer, nullable=False)
+    tool_name = Column(Text, nullable=False)
+    args_json = Column(Text, nullable=False)
+    risk_level = Column(Text, nullable=False)
+    approval = Column(Text, nullable=False, default="pending")
+    description = Column(Text, nullable=False, default="")
+    success = Column(Integer)
+    output_json = Column(Text)
+    error = Column(Text)
+    duration_ms = Column(Integer, default=0)
+    created_at = Column(Text, nullable=False)
+
+    agent_log = relationship("AgentLog", back_populates="steps")
+
+    __table_args__ = (
+        CheckConstraint("risk_level IN ('LOW', 'MEDIUM', 'HIGH')"),
+        CheckConstraint("approval IN ('auto_approved', 'pending', 'approved', 'rejected')"),
+        Index("idx_agent_steps_log", "agent_log_id", "step_index"),
+    )
