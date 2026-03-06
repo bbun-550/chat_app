@@ -10,8 +10,11 @@ from app.services.models import (
     AgentLog,
     AgentStep,
     Conversation,
+    Event,
+    Job,
     Message,
     SystemPrompt,
+    Report,
     Run,
     MessageMeta,
     KDExample,
@@ -795,3 +798,177 @@ def get_agent_steps(agent_log_id: str) -> list[dict]:
             .order_by(AgentStep.step_index)
         ).scalars().all()
         return [_agent_step_to_dict(r) for r in rows]
+
+
+# ── Jobs ──
+
+
+def _job_to_dict(j: Job) -> dict:
+    return {
+        "id": j.id, "name": j.name, "task_type": j.task_type,
+        "cron_expression": j.cron_expression, "params_json": j.params_json,
+        "enabled": j.enabled, "last_run_at": j.last_run_at,
+        "next_run_at": j.next_run_at,
+        "created_at": j.created_at, "updated_at": j.updated_at,
+    }
+
+
+def create_job(
+    name: str, task_type: str, cron_expression: str, params: dict | None = None
+) -> dict:
+    job_id = str(uuid.uuid4())
+    now = now_iso()
+    with get_session() as s:
+        j = Job(
+            id=job_id, name=name, task_type=task_type,
+            cron_expression=cron_expression,
+            params_json=json.dumps(params or {}, ensure_ascii=False),
+            enabled=1, created_at=now, updated_at=now,
+        )
+        s.add(j)
+        s.flush()
+        return _job_to_dict(j)
+
+
+def list_jobs(enabled_only: bool = False) -> list[dict]:
+    with get_session() as s:
+        stmt = select(Job).order_by(desc(Job.created_at))
+        if enabled_only:
+            stmt = stmt.where(Job.enabled == 1)
+        rows = s.execute(stmt).scalars().all()
+        return [_job_to_dict(r) for r in rows]
+
+
+def get_job(job_id: str) -> Optional[dict]:
+    with get_session() as s:
+        j = s.get(Job, job_id)
+        return _job_to_dict(j) if j else None
+
+
+def update_job(job_id: str, **kwargs) -> Optional[dict]:
+    kwargs["updated_at"] = now_iso()
+    with get_session() as s:
+        s.execute(update(Job).where(Job.id == job_id).values(**kwargs))
+    return get_job(job_id)
+
+
+def delete_job(job_id: str) -> bool:
+    with get_session() as s:
+        result = s.execute(delete(Job).where(Job.id == job_id))
+        return result.rowcount > 0
+
+
+def update_job_last_run(job_id: str, next_run_at: Optional[str] = None) -> None:
+    values: dict = {"last_run_at": now_iso(), "updated_at": now_iso()}
+    if next_run_at:
+        values["next_run_at"] = next_run_at
+    with get_session() as s:
+        s.execute(update(Job).where(Job.id == job_id).values(**values))
+
+
+# ── Reports ──
+
+
+def _report_to_dict(r: Report) -> dict:
+    return {
+        "id": r.id, "job_id": r.job_id, "report_type": r.report_type,
+        "title": r.title, "content": r.content, "summary": r.summary,
+        "params_json": r.params_json, "provider": r.provider, "model": r.model,
+        "latency_ms": r.latency_ms, "input_tokens": r.input_tokens,
+        "output_tokens": r.output_tokens, "status": r.status,
+        "created_at": r.created_at,
+    }
+
+
+def insert_report(
+    report_type: str, title: str, content: str,
+    job_id: Optional[str] = None, summary: Optional[str] = None,
+    params: Optional[dict] = None, provider: Optional[str] = None,
+    model: Optional[str] = None, latency_ms: Optional[int] = None,
+    input_tokens: Optional[int] = None, output_tokens: Optional[int] = None,
+    status: str = "completed",
+) -> str:
+    report_id = str(uuid.uuid4())
+    with get_session() as s:
+        s.add(Report(
+            id=report_id, job_id=job_id, report_type=report_type,
+            title=title, content=content, summary=summary,
+            params_json=json.dumps(params or {}, ensure_ascii=False),
+            provider=provider, model=model, latency_ms=latency_ms,
+            input_tokens=input_tokens, output_tokens=output_tokens,
+            status=status, created_at=now_iso(),
+        ))
+    return report_id
+
+
+def list_reports(report_type: Optional[str] = None, limit: int = 50) -> list[dict]:
+    with get_session() as s:
+        stmt = select(Report).order_by(desc(Report.created_at)).limit(limit)
+        if report_type:
+            stmt = stmt.where(Report.report_type == report_type)
+        rows = s.execute(stmt).scalars().all()
+        return [_report_to_dict(r) for r in rows]
+
+
+def get_report(report_id: str) -> Optional[dict]:
+    with get_session() as s:
+        r = s.get(Report, report_id)
+        return _report_to_dict(r) if r else None
+
+
+def update_report_status(
+    report_id: str, status: str, content: Optional[str] = None
+) -> None:
+    values: dict = {"status": status}
+    if content is not None:
+        values["content"] = content
+    with get_session() as s:
+        s.execute(update(Report).where(Report.id == report_id).values(**values))
+
+
+# ── Events ──
+
+
+def _event_to_dict(e: Event) -> dict:
+    return {
+        "id": e.id, "event_type": e.event_type, "title": e.title,
+        "body": e.body, "ref_id": e.ref_id, "ref_type": e.ref_type,
+        "is_read": e.is_read, "created_at": e.created_at,
+    }
+
+
+def insert_event(
+    event_type: str, title: str, body: Optional[str] = None,
+    ref_id: Optional[str] = None, ref_type: Optional[str] = None,
+) -> str:
+    event_id = str(uuid.uuid4())
+    with get_session() as s:
+        s.add(Event(
+            id=event_id, event_type=event_type, title=title,
+            body=body, ref_id=ref_id, ref_type=ref_type,
+            is_read=0, created_at=now_iso(),
+        ))
+    return event_id
+
+
+def list_events(unread_only: bool = False, limit: int = 50) -> list[dict]:
+    with get_session() as s:
+        stmt = select(Event).order_by(desc(Event.created_at)).limit(limit)
+        if unread_only:
+            stmt = stmt.where(Event.is_read == 0)
+        rows = s.execute(stmt).scalars().all()
+        return [_event_to_dict(r) for r in rows]
+
+
+def mark_event_read(event_id: str) -> None:
+    with get_session() as s:
+        s.execute(update(Event).where(Event.id == event_id).values(is_read=1))
+
+
+def get_events_after(after_iso: str, limit: int = 100) -> list[dict]:
+    with get_session() as s:
+        rows = s.execute(
+            select(Event).where(Event.created_at > after_iso)
+            .order_by(Event.created_at).limit(limit)
+        ).scalars().all()
+        return [_event_to_dict(r) for r in rows]

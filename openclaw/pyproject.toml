@@ -5,6 +5,7 @@ description = "Personal AI console web MVP"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "apscheduler>=3.10",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
     "pydantic>=2.0",

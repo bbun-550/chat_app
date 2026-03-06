@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.api import agent, chat, conversations, export, system_prompts
+from app.api import agent, chat, conversations, events, export, jobs, reports, system_prompts
 
 load_dotenv()
 
@@ -23,6 +23,21 @@ app.include_router(system_prompts.router)
 app.include_router(chat.router)
 app.include_router(export.router)
 app.include_router(agent.router)
+app.include_router(jobs.router)
+app.include_router(reports.router)
+app.include_router(events.router)
+
+
+@app.on_event("startup")
+def on_startup():
+    from app.services.jobs.scheduler import start_scheduler
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    from app.services.jobs.scheduler import shutdown_scheduler
+    shutdown_scheduler()
 
 
 @app.get("/health")

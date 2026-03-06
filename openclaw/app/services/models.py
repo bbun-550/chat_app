@@ -188,3 +188,73 @@ class AgentStep(Base):
         CheckConstraint("approval IN ('auto_approved', 'pending', 'approved', 'rejected')"),
         Index("idx_agent_steps_log", "agent_log_id", "step_index"),
     )
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id = Column(Text, primary_key=True)
+    name = Column(Text, nullable=False)
+    task_type = Column(Text, nullable=False)
+    cron_expression = Column(Text, nullable=False)
+    params_json = Column(Text, nullable=False, default="{}")
+    enabled = Column(Integer, nullable=False, default=1)
+    last_run_at = Column(Text)
+    next_run_at = Column(Text)
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("task_type IN ('market_analysis', 'research_report', 'daily_summary')"),
+        CheckConstraint("enabled IN (0, 1)"),
+        Index("idx_jobs_enabled_next", "enabled", "next_run_at"),
+    )
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id = Column(Text, primary_key=True)
+    job_id = Column(Text, ForeignKey("jobs.id", ondelete="SET NULL"))
+    report_type = Column(Text, nullable=False)
+    title = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    summary = Column(Text)
+    params_json = Column(Text, nullable=False, default="{}")
+    provider = Column(Text)
+    model = Column(Text)
+    latency_ms = Column(Integer)
+    input_tokens = Column(Integer)
+    output_tokens = Column(Integer)
+    status = Column(Text, nullable=False, default="completed")
+    created_at = Column(Text, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "report_type IN ('market_analysis', 'research_report', 'daily_summary')"
+        ),
+        CheckConstraint("status IN ('pending', 'running', 'completed', 'failed')"),
+        Index("idx_reports_type_created", "report_type", created_at.desc()),
+        Index("idx_reports_job", "job_id"),
+    )
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id = Column(Text, primary_key=True)
+    event_type = Column(Text, nullable=False)
+    title = Column(Text, nullable=False)
+    body = Column(Text)
+    ref_id = Column(Text)
+    ref_type = Column(Text)
+    is_read = Column(Integer, nullable=False, default=0)
+    created_at = Column(Text, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('job_started', 'job_completed', 'job_failed', 'report_ready')"
+        ),
+        CheckConstraint("is_read IN (0, 1)"),
+        Index("idx_events_unread", "is_read", created_at.desc()),
+    )
