@@ -10,6 +10,9 @@ load_dotenv()
 
 app = FastAPI(title="OpenClaw")
 
+from app.middleware.auth import AuthMiddleware
+
+app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
