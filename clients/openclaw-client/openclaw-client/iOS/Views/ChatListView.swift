@@ -12,12 +12,7 @@ struct ChatListView: View {
         NavigationStack {
             List(convVM.filteredConversations) { conversation in
                 NavigationLink(value: conversation.id) {
-                    VStack(alignment: .leading) {
-                        Text(conversation.title)
-                        if let category = conversation.category, !category.isEmpty {
-                            Text(category).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+                    ConversationRowView(conversation: conversation)
                 }
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     Button {
@@ -38,6 +33,7 @@ struct ChatListView: View {
                     }
                 }
             }
+            .listStyle(.plain)
             .navigationTitle("Chats")
             .searchable(text: $convVM.searchText, prompt: "Search chats")
             .toolbar {
@@ -88,22 +84,91 @@ struct ChatListView: View {
             } message: {
                 Text("This conversation and all messages will be permanently deleted.")
             }
-            .alert("Rename Chat", isPresented: $showRenameAlert) {
-                TextField("Chat name", text: $renameText)
-                Button("Save") {
-                    guard let conversation = conversationToRename else { return }
-                    let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty else {
+            .sheet(isPresented: $showRenameAlert) {
+                RenameSheetView(
+                    text: $renameText,
+                    onSave: {
+                        guard let conversation = conversationToRename else { return }
+                        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else {
+                            conversationToRename = nil
+                            return
+                        }
+                        Task { await convVM.renameConversation(id: conversation.id, title: trimmed) }
                         conversationToRename = nil
-                        return
+                        showRenameAlert = false
+                    },
+                    onCancel: {
+                        conversationToRename = nil
+                        showRenameAlert = false
                     }
-                    Task { await convVM.renameConversation(id: conversation.id, title: trimmed) }
-                    conversationToRename = nil
-                }
-                Button("Cancel", role: .cancel) {
-                    conversationToRename = nil
-                }
+                )
+                .presentationDetents([.height(180)])
             }
         }
+    }
+}
+
+private struct RenameSheetView: View {
+    @Binding var text: String
+    var onSave: () -> Void
+    var onCancel: () -> Void
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                TextField("Chat name", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isFocused)
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Rename Chat")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: onSave)
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear { isFocused = true }
+        }
+    }
+}
+
+private struct ConversationRowView: View {
+    let conversation: Conversation
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bubble.left.fill")
+                .font(.body)
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(conversation.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                if let category = conversation.category, !category.isEmpty {
+                    Text(category)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Text(conversation.relativeUpdatedAt)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
     }
 }

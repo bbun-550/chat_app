@@ -6,16 +6,14 @@ struct OpenClawIOSApp: App {
     var body: some Scene {
         WindowGroup {
             TabView {
-                ChatListView()
-                    .tabItem {
-                        Label("Chats", systemImage: "bubble.left.and.bubble.right")
-                    }
-
-                NavigationStack {
-                    iOSSettingsView()
+                Tab("Chats", systemImage: "bubble.left.and.bubble.right") {
+                    ChatListView()
                 }
-                .tabItem {
-                    Label("Settings", systemImage: "gear")
+
+                Tab("Settings", systemImage: "gear") {
+                    NavigationStack {
+                        iOSSettingsView()
+                    }
                 }
             }
         }

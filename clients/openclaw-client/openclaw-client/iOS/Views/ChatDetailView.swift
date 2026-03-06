@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct ChatDetailView: View {
     let conversationId: String
@@ -12,11 +17,13 @@ struct ChatDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             messagesView
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
 
             composerControls
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Chat")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -40,64 +47,71 @@ struct ChatDetailView: View {
         }
     }
 
-    private var messagesView: some View {
-        GeometryReader { viewport in
-            ScrollViewReader { proxy in
-                ZStack(alignment: .bottomTrailing) {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 10) {
-                            ForEach(chatVM.messages) { message in
-                                MessageBubbleView(message: message)
-                                    .id(message.id)
-                            }
-                            Color.clear
-                                .frame(height: 1)
-                                .id(bottomAnchorID)
-                                .background(
-                                    GeometryReader { geometry in
-                                        Color.clear.preference(
-                                            key: BottomAnchorOffsetKey.self,
-                                            value: geometry.frame(in: .named("chat-scroll")).minY
-                                        )
-                                    }
-                                )
-                        }
-                        .padding()
-                    }
-                    .coordinateSpace(name: "chat-scroll")
-                    .onAppear {
-                        scrollToBottom(using: proxy, animated: false)
-                    }
-                    .onChange(of: chatVM.messages.count) { _, _ in
-                        scrollToBottom(using: proxy, animated: true)
-                    }
-                    .onPreferenceChange(BottomAnchorOffsetKey.self) { newValue in
-                        bottomAnchorMinY = newValue
-                        updateScrollButton(viewportHeight: viewport.size.height)
-                    }
-                    .onChange(of: viewport.size.height) { _, newValue in
-                        updateScrollButton(viewportHeight: newValue)
-                    }
+    @State private var viewportHeight: CGFloat = 0
 
-                    if showScrollToBottomButton {
-                        Button {
-                            scrollToBottom(using: proxy, animated: true)
-                        } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 36, height: 36)
-                                .background(Color.accentColor)
-                                .clipShape(Circle())
-                                .shadow(radius: 4)
-                        }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 12)
-                        .transition(.scale.combined(with: .opacity))
-                        .accessibilityLabel("Scroll to latest message")
+    private var messagesView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(chatVM.messages) { message in
+                        MessageBubbleView(message: message)
+                            .id(message.id)
                     }
+                    Color.clear
+                        .frame(height: 1)
+                        .id(bottomAnchorID)
+                        .background(
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: BottomAnchorOffsetKey.self,
+                                    value: geometry.frame(in: .named("chat-scroll")).minY
+                                )
+                            }
+                        )
+                }
+                .padding()
+            }
+            .coordinateSpace(name: "chat-scroll")
+            .scrollDismissesKeyboard(.interactively)
+            .onAppear {
+                scrollToBottom(using: proxy, animated: false)
+            }
+            .onChange(of: chatVM.messages.count) { _, _ in
+                scrollToBottom(using: proxy, animated: true)
+            }
+            .onPreferenceChange(BottomAnchorOffsetKey.self) { newValue in
+                bottomAnchorMinY = newValue
+                updateScrollButton(viewportHeight: viewportHeight)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if showScrollToBottomButton {
+                    Button {
+                        scrollToBottom(using: proxy, animated: true)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(Color.accentColor)
+                            .clipShape(Circle())
+                            .shadow(radius: 4)
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 12)
+                    .transition(.scale.combined(with: .opacity))
+                    .accessibilityLabel("Scroll to latest message")
                 }
             }
+            .background(
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { viewportHeight = geometry.size.height }
+                        .onChange(of: geometry.size.height) { _, newValue in
+                            viewportHeight = newValue
+                            updateScrollButton(viewportHeight: newValue)
+                        }
+                }
+            )
         }
     }
 
@@ -194,7 +208,11 @@ private struct MessageBubbleView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .contextMenu {
                     Button {
+                        #if os(iOS)
                         UIPasteboard.general.string = message.content
+                        #elseif os(macOS)
+                        NSPasteboard.general.setString(message.content, forType: .string)
+                        #endif
                     } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
