@@ -141,13 +141,23 @@ private struct ConversationRow: View {
 
 private struct MessageBubble: View {
     let message: Message
-    
+
+    private var isUser: Bool { message.role == "user" }
+
+    private var displayContent: AttributedString {
+        guard !isUser else { return AttributedString(message.content) }
+        return (try? AttributedString(
+            markdown: message.content,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(message.content)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(message.role == "user" ? "You" : "Assistant")
+            Text(isUser ? "You" : "Assistant")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(message.content)
+            Text(displayContent)
                 .textSelection(.enabled)
                 .padding(10)
                 .background(.thinMaterial)

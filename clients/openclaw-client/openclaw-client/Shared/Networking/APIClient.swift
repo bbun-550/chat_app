@@ -132,4 +132,12 @@ extension APIClient {
         let body = try JSONEncoder().encode(requestModel)
         return try await request(endpoint: .upsertMessageMeta(messageId: messageId), body: body)
     }
+
+    func fetchProviders() async throws -> [String] {
+        try await request(endpoint: .providers)
+    }
+
+    func fetchModels(provider: String) async throws -> [String] {
+        try await request(endpoint: .providerModels(provider: provider))
+    }
 }

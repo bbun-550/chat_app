@@ -22,6 +22,22 @@ class LLMRouter:
     def list_providers(self) -> list[str]:
         return list(self.providers.keys())
 
+    GEMINI_MODELS = [
+        "gemini-3-flash-preview",
+        "gemini-2.5-pro",
+        "gemini-2.5-pro-exp-03-25",
+    ]
+
+    def list_models(self, provider_name: str) -> list[str]:
+        provider = self.providers.get(provider_name)
+        if provider is None:
+            raise ValueError(f"Unknown provider: {provider_name}")
+        if hasattr(provider, "list_models"):
+            return provider.list_models()
+        if provider_name == "gemini":
+            return self.GEMINI_MODELS
+        return []
+
     def generate(self, provider_name: str, req: LLMRequest) -> LLMResponse:
         provider = self.providers.get(provider_name)
         if provider is None:

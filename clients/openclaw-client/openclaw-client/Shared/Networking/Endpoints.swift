@@ -9,6 +9,8 @@ enum Endpoint {
     case chat
     case runs(conversationId: String?)
     case upsertMessageMeta(messageId: String)
+    case providers
+    case providerModels(provider: String)
     case exportConversation(conversationId: String, format: String)
     case exportAll(format: String, minQuality: Int?)
 
@@ -29,6 +31,10 @@ enum Endpoint {
             return "/runs"
         case .upsertMessageMeta(let messageId):
             return "/messages/\(messageId)/meta"
+        case .providers:
+            return "/providers"
+        case .providerModels(let provider):
+            return "/providers/\(provider)/models"
         case .exportConversation(let conversationId, let format):
             return "/export/\(conversationId)?format=\(format)"
         case .exportAll(let format, let minQuality):

@@ -126,12 +126,33 @@ struct ChatDetailView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Picker("Model", selection: $chatVM.model) {
-                Text("Flash").tag("gemini-3-flash-preview")
-                Text("Pro").tag("gemini-2.5-pro")
-                Text("Exp").tag("gemini-2.5-pro-exp-03-25")
+            if chatVM.availableProviders.count > 1 {
+                Picker("Provider", selection: Binding(
+                    get: { chatVM.provider },
+                    set: { chatVM.switchProvider($0) }
+                )) {
+                    ForEach(chatVM.availableProviders, id: \.self) { p in
+                        Text(p.capitalized).tag(p)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
-            .pickerStyle(.segmented)
+
+            if chatVM.availableModels.count > 3 {
+                Picker("Model", selection: $chatVM.model) {
+                    ForEach(chatVM.availableModels, id: \.self) { m in
+                        Text(modelDisplayName(m)).tag(m)
+                    }
+                }
+                .pickerStyle(.menu)
+            } else {
+                Picker("Model", selection: $chatVM.model) {
+                    ForEach(chatVM.availableModels, id: \.self) { m in
+                        Text(modelDisplayName(m)).tag(m)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
 
             HStack {
                 TextField("Message...", text: $chatVM.inputText, axis: .vertical)
@@ -169,6 +190,15 @@ struct ChatDetailView: View {
         }
     }
 
+    private func modelDisplayName(_ model: String) -> String {
+        if model.hasPrefix("gemini-") {
+            if model.contains("flash") { return "Flash" }
+            if model.contains("pro-exp") { return "Exp" }
+            if model.contains("pro") { return "Pro" }
+        }
+        return model.components(separatedBy: ":").first ?? model
+    }
+
     private func updateScrollButton(viewportHeight: CGFloat) {
         let threshold: CGFloat = 120
         let shouldShow = (bottomAnchorMinY - viewportHeight) > threshold
@@ -190,17 +220,25 @@ private struct BottomAnchorOffsetKey: PreferenceKey {
 
 private struct MessageBubbleView: View {
     let message: Message
-    
+
     private var isUser: Bool {
         message.role == "user"
     }
-    
+
+    private var displayContent: AttributedString {
+        guard !isUser else { return AttributedString(message.content) }
+        return (try? AttributedString(
+            markdown: message.content,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(message.content)
+    }
+
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
             Text(isUser ? "You" : "Assistant")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(message.content)
+            Text(displayContent)
                 .textSelection(.enabled)
                 .padding(10)
                 .background(isUser ? Color.accentColor : Color.secondary.opacity(0.16))

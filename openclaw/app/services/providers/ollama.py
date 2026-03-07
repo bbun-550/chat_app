@@ -16,6 +16,10 @@ class OllamaProvider:
     def __init__(self) -> None:
         self.client = ollama_lib.Client(host=OLLAMA_BASE_URL)
 
+    def list_models(self) -> list[str]:
+        response = self.client.list()
+        return [m.model for m in response.models]
+
     def generate(self, req: LLMRequest) -> LLMResponse:
         model = req.model or DEFAULT_MODEL
         start = time.time()

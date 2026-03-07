@@ -18,6 +18,8 @@ final class ChatViewModel: ObservableObject {
 
     @Published var provider = "gemini"
     @Published var model = "gemini-3-flash-preview"
+    @Published var availableProviders: [String] = []
+    @Published var availableModels: [String] = []
     @Published var temperature: Double = 0.2
     @Published var maxTokens: Int = 2048
     @Published var topP: Double? = nil
@@ -43,6 +45,38 @@ final class ChatViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+
+        await loadProviders()
+    }
+
+    func loadProviders() async {
+        do {
+            let providers = try await APIClient.shared.fetchProviders()
+            availableProviders = providers
+            if !providers.contains(provider), let first = providers.first {
+                provider = first
+            }
+            await loadModels()
+        } catch {
+            availableProviders = ["gemini"]
+        }
+    }
+
+    func loadModels() async {
+        do {
+            let models = try await APIClient.shared.fetchModels(provider: provider)
+            availableModels = models
+            if !models.contains(model), let first = models.first {
+                model = first
+            }
+        } catch {
+            availableModels = []
+        }
+    }
+
+    func switchProvider(_ newProvider: String) {
+        provider = newProvider
+        Task { await loadModels() }
     }
 
     func send() async {
@@ -57,7 +91,7 @@ final class ChatViewModel: ObservableObject {
         isSending = true
         errorMessage = nil
 
-        let selectedModel = model.isEmpty ? "gemini-3-flash-preview" : model
+        let selectedModel = model.isEmpty ? availableModels.first ?? "gemini-3-flash-preview" : model
         let localUser = Message(
             id: UUID().uuidString,
             conversation_id: cid,

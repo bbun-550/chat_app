@@ -23,6 +23,19 @@ def get_llm_router() -> LLMRouter:
     return _llm_router
 
 
+@router.get("/providers")
+def list_providers():
+    return get_llm_router().list_providers()
+
+
+@router.get("/providers/{provider_name}/models")
+def list_provider_models(provider_name: str):
+    try:
+        return get_llm_router().list_models(provider_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/chat", response_model=ChatResponse)
 def send_message(req: ChatRequest):
     conversation = store.get_conversation(req.conversation_id)
