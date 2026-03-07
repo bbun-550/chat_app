@@ -138,20 +138,29 @@ struct ChatDetailView: View {
                 .pickerStyle(.segmented)
             }
 
-            if chatVM.availableModels.count > 3 {
-                Picker("Model", selection: $chatVM.model) {
-                    ForEach(chatVM.availableModels, id: \.self) { m in
-                        Text(modelDisplayName(m)).tag(m)
+            Menu {
+                ForEach(chatVM.availableModels, id: \.self) { m in
+                    Button {
+                        chatVM.model = m
+                    } label: {
+                        HStack {
+                            Text(modelDisplayName(m))
+                            if m == chatVM.model {
+                                Image(systemName: "checkmark")
+                            }
+                        }
                     }
                 }
-                .pickerStyle(.menu)
-            } else {
-                Picker("Model", selection: $chatVM.model) {
-                    ForEach(chatVM.availableModels, id: \.self) { m in
-                        Text(modelDisplayName(m)).tag(m)
-                    }
+            } label: {
+                HStack {
+                    Text(modelDisplayName(chatVM.model))
+                        .font(.subheadline)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
                 }
-                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             }
 
             HStack {
@@ -225,36 +234,34 @@ private struct MessageBubbleView: View {
         message.role == "user"
     }
 
-    private var displayContent: AttributedString {
-        guard !isUser else { return AttributedString(message.content) }
-        return (try? AttributedString(
-            markdown: message.content,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(message.content)
-    }
-
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
             Text(isUser ? "You" : "Assistant")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(displayContent)
-                .textSelection(.enabled)
-                .padding(10)
-                .background(isUser ? Color.accentColor : Color.secondary.opacity(0.16))
-                .foregroundStyle(isUser ? Color.white : Color.primary)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .contextMenu {
-                    Button {
-                        #if os(iOS)
-                        UIPasteboard.general.string = message.content
-                        #elseif os(macOS)
-                        NSPasteboard.general.setString(message.content, forType: .string)
-                        #endif
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
+            Group {
+                if isUser {
+                    Text(message.content)
+                } else {
+                    MarkdownContentView(text: message.content)
                 }
+            }
+            .textSelection(.enabled)
+            .padding(10)
+            .background(isUser ? Color.accentColor : Color.secondary.opacity(0.16))
+            .foregroundStyle(isUser ? Color.white : Color.primary)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .contextMenu {
+                Button {
+                    #if os(iOS)
+                    UIPasteboard.general.string = message.content
+                    #elseif os(macOS)
+                    NSPasteboard.general.setString(message.content, forType: .string)
+                    #endif
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
