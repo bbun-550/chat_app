@@ -144,25 +144,23 @@ private struct MessageBubble: View {
 
     private var isUser: Bool { message.role == "user" }
 
-    private var displayContent: AttributedString {
-        guard !isUser else { return AttributedString(message.content) }
-        return (try? AttributedString(
-            markdown: message.content,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(message.content)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(isUser ? "You" : "Assistant")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(displayContent)
-                .textSelection(.enabled)
-                .padding(10)
-                .background(.thinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+            Group {
+                if isUser {
+                    Text(message.content)
+                } else {
+                    MarkdownContentView(text: message.content)
+                }
+            }
+            .textSelection(.enabled)
+            .padding(10)
+            .background(.thinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        .frame(maxWidth: .infinity, alignment: message.role == "user" ? .trailing : .leading)
+        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
 }

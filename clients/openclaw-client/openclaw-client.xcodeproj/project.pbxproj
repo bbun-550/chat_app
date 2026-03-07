@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F73DA87A2F5C71800038F4DB /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = F73DA8792F5C71800038F4DB /* MarkdownUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		F7C0D5222F52737B0006E575 /* openclaw-client.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "openclaw-client.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -36,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F73DA87A2F5C71800038F4DB /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +83,7 @@
 			);
 			name = "openclaw-client";
 			packageProductDependencies = (
+				F73DA8792F5C71800038F4DB /* MarkdownUI */,
 			);
 			productName = "openclaw-client";
 			productReference = F7C0D5222F52737B0006E575 /* openclaw-client.app */;
@@ -107,6 +113,9 @@
 			);
 			mainGroup = F7C0D5192F52737B0006E575;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F73DA8782F5C71800038F4DB /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F7C0D5232F52737B0006E575 /* Products */;
 			projectDirPath = "";
@@ -375,6 +384,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F73DA8782F5C71800038F4DB /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F73DA8792F5C71800038F4DB /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F73DA8782F5C71800038F4DB /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F7C0D51A2F52737B0006E575 /* Project object */;
 }
