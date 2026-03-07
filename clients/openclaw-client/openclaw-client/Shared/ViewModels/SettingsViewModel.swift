@@ -8,6 +8,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var provider: String = "gemini"
     @Published var model: String = "gemini-2.0-flash"
     @Published var errorMessage: String?
+    @Published var isTokenVisible = false
     @Published var showSaveConfirmation = false
     @Published var showResetConfirmation = false
 

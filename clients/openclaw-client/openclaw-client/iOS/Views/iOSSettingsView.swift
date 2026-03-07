@@ -7,7 +7,23 @@ struct iOSSettingsView: View {
         Form {
             Section("Server") {
                 TextField("Base URL", text: $vm.serverURLText)
-                TextField("API Token (optional)", text: $vm.apiToken)
+                HStack {
+                    if vm.isTokenVisible {
+                        TextField("API Token (optional)", text: $vm.apiToken)
+                            .textContentType(.password)
+                    } else {
+                        SecureField("API Token (optional)", text: $vm.apiToken)
+                            .textContentType(.password)
+                    }
+                    Button {
+                        vm.isTokenVisible.toggle()
+                    } label: {
+                        Image(systemName: vm.isTokenVisible ? "eye" : "eye.slash")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(vm.isTokenVisible ? "Hide API token" : "Show API token")
+                }
                 Button {
                     vm.saveServerURL()
                 } label: {
