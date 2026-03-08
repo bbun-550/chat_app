@@ -45,7 +45,7 @@ class OllamaProvider:
         input_tokens = response.get("prompt_eval_count")
         output_tokens = response.get("eval_count")
 
-        raw: Any = {k: v for k, v in response.items() if k != "message"}
+        raw: Any = {k: v for k, v in response.model_dump().items() if k != "message"}
 
         return LLMResponse(
             reply_text=reply_text,
