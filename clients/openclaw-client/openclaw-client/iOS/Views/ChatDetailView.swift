@@ -162,6 +162,7 @@ struct ChatDetailView: View {
                 .padding(.vertical, 6)
                 .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack {
                 TextField("Message...", text: $chatVM.inputText, axis: .vertical)
