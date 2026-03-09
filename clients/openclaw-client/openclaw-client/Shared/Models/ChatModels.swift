@@ -38,6 +38,17 @@ struct MessageMetaUpsertRequest: Codable {
     let notes: String?
 }
 
+struct StreamedChatChunk: Codable {
+    let delta: String
+    let done: Bool
+    let provider: String?
+    let model: String?
+    let latency_ms: Int?
+    let input_tokens: Int?
+    let output_tokens: Int?
+    let error: String?
+}
+
 struct APIErrorResponse: Codable {
     let detail: String
 }

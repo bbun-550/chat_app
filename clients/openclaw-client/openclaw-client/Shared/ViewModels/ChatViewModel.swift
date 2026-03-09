@@ -102,36 +102,49 @@ final class ChatViewModel: ObservableObject {
         messages.append(localUser)
         inputText = ""
 
+        let req = ChatRequest(
+            conversation_id: cid,
+            message: text,
+            provider: provider,
+            model: selectedModel,
+            system_prompt_id: nil,
+            temperature: temperature,
+            max_tokens: maxTokens,
+            top_p: topP,
+            top_k: topK,
+            candidate_count: candidateCount
+        )
+
+        var placeholder = Message(
+            id: UUID().uuidString,
+            conversation_id: cid,
+            role: "assistant",
+            content: "",
+            created_at: ISO8601DateFormatter().string(from: Date())
+        )
+        messages.append(placeholder)
+        let placeholderIndex = messages.count - 1
+
         do {
-            let req = ChatRequest(
-                conversation_id: cid,
-                message: text,
-                provider: provider,
-                model: selectedModel,
-                system_prompt_id: nil,
-                temperature: temperature,
-                max_tokens: maxTokens,
-                top_p: topP,
-                top_k: topK,
-                candidate_count: candidateCount
-            )
-            let res = try await APIClient.shared.sendMessage(req)
+            for try await chunk in APIClient.shared.sendMessageStream(req) {
+                if let error = chunk.error {
+                    throw APIError.serverError(500, error)
+                }
 
-            let localAssistant = Message(
-                id: UUID().uuidString,
-                conversation_id: cid,
-                role: "assistant",
-                content: res.reply,
-                created_at: ISO8601DateFormatter().string(from: Date())
-            )
-            messages.append(localAssistant)
+                messages[placeholderIndex].content += chunk.delta
 
-            lastProvider = res.provider
-            lastModel = res.model
-            lastLatencyMs = "\(res.latency_ms)"
-            lastInputTokens = res.input_tokens.map(String.init) ?? "-"
-            lastOutputTokens = res.output_tokens.map(String.init) ?? "-"
+                if chunk.done {
+                    lastProvider = chunk.provider ?? provider
+                    lastModel = chunk.model ?? selectedModel
+                    lastLatencyMs = chunk.latency_ms.map(String.init) ?? "-"
+                    lastInputTokens = chunk.input_tokens.map(String.init) ?? "-"
+                    lastOutputTokens = chunk.output_tokens.map(String.init) ?? "-"
+                }
+            }
         } catch {
+            if messages[placeholderIndex].content.isEmpty {
+                messages.remove(at: placeholderIndex)
+            }
             errorMessage = error.localizedDescription
         }
 

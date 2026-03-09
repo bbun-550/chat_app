@@ -1,11 +1,12 @@
 import os
 import time
+from collections.abc import Iterator
 from typing import Any
 
 from google import genai
 from google.genai import types
 
-from app.services.providers.base import LLMRequest, LLMResponse
+from app.services.providers.base import LLMRequest, LLMResponse, StreamChunk
 
 DEFAULT_MODEL = "gemini-3-flash-preview"
 
@@ -62,4 +63,42 @@ class GeminiProvider:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             raw=raw_json,
+        )
+
+    def generate_stream(self, req: LLMRequest) -> Iterator[StreamChunk]:
+        model = req.model or DEFAULT_MODEL
+
+        contents = []
+        for msg in req.messages:
+            role = "model" if msg.role == "assistant" else "user"
+            contents.append(types.Content(role=role, parts=[types.Part(text=msg.content)]))
+
+        config = types.GenerateContentConfig(
+            temperature=req.temperature,
+            max_output_tokens=req.max_tokens,
+        )
+        if req.system_prompt:
+            config.system_instruction = req.system_prompt
+
+        stream = self.client.models.generate_content_stream(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+
+        input_tokens = None
+        output_tokens = None
+        for chunk in stream:
+            delta = getattr(chunk, "text", "") or ""
+            usage = getattr(chunk, "usage_metadata", None)
+            if usage:
+                input_tokens = getattr(usage, "prompt_token_count", None)
+                output_tokens = getattr(usage, "candidates_token_count", None)
+            yield StreamChunk(delta_text=delta, done=False)
+
+        yield StreamChunk(
+            delta_text="",
+            done=True,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )

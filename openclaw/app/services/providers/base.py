@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -29,7 +30,24 @@ class LLMResponse:
     raw: Optional[dict[str, Any]] = None
 
 
+@dataclass
+class StreamChunk:
+    delta_text: str
+    done: bool
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+
+
 class LLMProvider(Protocol):
     name: str
 
     def generate(self, req: LLMRequest) -> LLMResponse: ...
+
+    def generate_stream(self, req: LLMRequest) -> Iterator[StreamChunk]:
+        response = self.generate(req)
+        yield StreamChunk(
+            delta_text=response.reply_text,
+            done=True,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+        )

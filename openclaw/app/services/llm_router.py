@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Iterator
 
-from app.services.providers.base import LLMProvider, LLMRequest, LLMResponse
+from app.services.providers.base import LLMProvider, LLMRequest, LLMResponse, StreamChunk
 from app.services.providers.gemini import GeminiProvider
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,7 @@ class LLMRouter:
 
     GEMINI_MODELS = [
         "gemini-3-flash-preview",
-        "gemini-2.5-pro",
-        "gemini-2.5-pro-exp-03-25",
+        "gemini-3.1-pro-preview",
     ]
 
     def list_models(self, provider_name: str) -> list[str]:
@@ -45,3 +45,11 @@ class LLMRouter:
                 f"Unknown provider: {provider_name}. Available providers: {self.list_providers()}"
             )
         return provider.generate(req)
+
+    def generate_stream(self, provider_name: str, req: LLMRequest) -> Iterator[StreamChunk]:
+        provider = self.providers.get(provider_name)
+        if provider is None:
+            raise ValueError(
+                f"Unknown provider: {provider_name}. Available providers: {self.list_providers()}"
+            )
+        yield from provider.generate_stream(req)

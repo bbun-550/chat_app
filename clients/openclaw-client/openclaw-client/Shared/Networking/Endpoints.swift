@@ -7,6 +7,7 @@ enum Endpoint {
     case deleteConversation(id: String)
     case messages(conversationId: String)
     case chat
+    case chatStream
     case runs(conversationId: String?)
     case upsertMessageMeta(messageId: String)
     case providers
@@ -24,6 +25,8 @@ enum Endpoint {
             return "/conversations/\(id)/messages"
         case .chat:
             return "/chat"
+        case .chatStream:
+            return "/chat/stream"
         case .runs(let conversationId):
             if let id = conversationId {
                 return "/runs?conversation_id=\(id)"
@@ -47,7 +50,7 @@ enum Endpoint {
 
     var method: String {
         switch self {
-        case .createConversation, .chat:
+        case .createConversation, .chat, .chatStream:
             return "POST"
         case .patchConversation:
             return "PATCH"
