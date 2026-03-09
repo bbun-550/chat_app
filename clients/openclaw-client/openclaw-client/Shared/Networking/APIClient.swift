@@ -26,8 +26,8 @@ final class APIClient {
 
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 20
-        config.timeoutIntervalForResource = 30
+        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForResource = 300
         return URLSession(configuration: config)
     }()
 
@@ -122,6 +122,51 @@ extension APIClient {
     func sendMessage(_ requestModel: ChatRequest) async throws -> ChatResponse {
         let body = try JSONEncoder().encode(requestModel)
         return try await request(endpoint: .chat, body: body)
+    }
+
+    func sendMessageStream(_ requestModel: ChatRequest) -> AsyncThrowingStream<StreamedChatChunk, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    guard let url = buildURL(for: .chatStream) else {
+                        continuation.finish(throwing: APIError.invalidURL)
+                        return
+                    }
+
+                    var req = URLRequest(url: url)
+                    req.httpMethod = Endpoint.chatStream.method
+                    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    if let token = AppConfig.apiToken {
+                        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    }
+                    req.httpBody = try JSONEncoder().encode(requestModel)
+
+                    let (bytes, response) = try await session.bytes(for: req)
+
+                    guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                        continuation.finish(throwing: APIError.requestFailed)
+                        return
+                    }
+
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data: ") else { continue }
+                        let jsonStr = String(line.dropFirst(6))
+                        guard let data = jsonStr.data(using: .utf8) else { continue }
+
+                        let chunk = try self.decoder.decode(StreamedChatChunk.self, from: data)
+                        continuation.yield(chunk)
+
+                        if chunk.done {
+                            break
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
     }
 
     func fetchRuns(conversationId: String?) async throws -> [RunStats] {
