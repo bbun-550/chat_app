@@ -205,7 +205,23 @@ struct ChatDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack {
+            HStack(spacing: 8) {
+                Button {
+                    chatVM.enableRouting.toggle()
+                } label: {
+                    Image(systemName: "arrow.triangle.branch")
+                        .foregroundStyle(chatVM.enableRouting ? Color.accentColor : Color.secondary)
+                        .padding(6)
+                        .background(
+                            chatVM.enableRouting
+                                ? Color.accentColor.opacity(0.15)
+                                : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Router LLM: browse/research/execute 의도 분류")
+
                 TextField("Message...", text: $chatVM.inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...5)

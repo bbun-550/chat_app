@@ -14,6 +14,9 @@ from app.services.llm.prompt_builder import build_prompt
 from app.services.memory.vector_store import extract_and_store_memories
 from app.services.memory.summarizer import auto_summarize_if_needed
 from app.services.providers.base import ChatMessage, LLMRequest
+from app.services.llm.intent_classifier import classify_intent
+from app.services.llm.tool_dispatcher import ToolDispatcher
+from app.services.llm.router_config import ROUTER_ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,40 @@ def send_message(req: ChatRequest):
 
     selected_model = req.model or "gemini-3-flash-preview"
     user_message_id = store.insert_message(req.conversation_id, "user", req.message, selected_model)
+
+    # ── Router LLM ──────────────────────────────────────────────────────────
+    if req.enable_routing and ROUTER_ENABLED:
+        try:
+            _router = get_llm_router()
+            _llm_fn = lambda r: _router.generate(req.provider, r)
+            classified = classify_intent(req.message, _llm_fn)
+            tool_reply = ToolDispatcher().dispatch(classified, req.message, _llm_fn)
+            if tool_reply is not None:
+                assistant_message_id = store.insert_message(
+                    req.conversation_id, "assistant", tool_reply, selected_model
+                )
+                store.upsert_kd_example(
+                    conversation_id=req.conversation_id,
+                    user_message_id=user_message_id,
+                    assistant_message_id=assistant_message_id,
+                    system_prompt=system_prompt_content,
+                    prompt_text=req.message,
+                    answer_text=tool_reply,
+                    provider=req.provider,
+                    model=selected_model,
+                    run_id=None,
+                )
+                store.touch_conversation(req.conversation_id)
+                return ChatResponse(
+                    reply=tool_reply,
+                    provider=req.provider,
+                    model=selected_model,
+                    latency_ms=0,
+                    input_tokens=None,
+                    output_tokens=None,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Router LLM failed, falling back to standard pipeline: %s", exc)
 
     llm_req = build_prompt(
         conversation_id=req.conversation_id,
@@ -142,6 +179,53 @@ def send_message_stream(req: ChatRequest):
 
     selected_model = req.model or "gemini-3-flash-preview"
     user_message_id = store.insert_message(req.conversation_id, "user", req.message, selected_model)
+
+    # ── Router LLM (stream variant) ─────────────────────────────────────────
+    if req.enable_routing and ROUTER_ENABLED:
+        try:
+            _router = get_llm_router()
+            _llm_fn = lambda r: _router.generate(req.provider, r)
+            classified = classify_intent(req.message, _llm_fn)
+            tool_reply = ToolDispatcher().dispatch(classified, req.message, _llm_fn)
+            if tool_reply is not None:
+                import json as _json
+
+                def _tool_stream():
+                    init = {"delta": "", "done": False, "user_message_id": user_message_id}
+                    yield f"data: {_json.dumps(init)}\n\n"
+                    chunk_event = {"delta": tool_reply, "done": False}
+                    yield f"data: {_json.dumps(chunk_event)}\n\n"
+                    # Persist before the final done event so DB ops are not skipped
+                    # if the client closes the connection after receiving done.
+                    _asst_id = store.insert_message(
+                        req.conversation_id, "assistant", tool_reply, selected_model
+                    )
+                    store.upsert_kd_example(
+                        conversation_id=req.conversation_id,
+                        user_message_id=user_message_id,
+                        assistant_message_id=_asst_id,
+                        system_prompt=system_prompt_content,
+                        prompt_text=req.message,
+                        answer_text=tool_reply,
+                        provider=req.provider,
+                        model=selected_model,
+                        run_id=None,
+                    )
+                    store.touch_conversation(req.conversation_id)
+                    done_event = {
+                        "delta": "", "done": True,
+                        "provider": req.provider, "model": selected_model,
+                        "latency_ms": 0, "input_tokens": None, "output_tokens": None,
+                    }
+                    yield f"data: {_json.dumps(done_event)}\n\n"
+
+                return StreamingResponse(
+                    _tool_stream(),
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Router LLM (stream) failed, falling back: %s", exc)
 
     llm_req = build_prompt(
         conversation_id=req.conversation_id,

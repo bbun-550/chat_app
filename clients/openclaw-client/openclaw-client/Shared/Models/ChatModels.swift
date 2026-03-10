@@ -11,6 +11,7 @@ struct ChatRequest: Codable {
     let top_p: Double?
     let top_k: Int?
     let candidate_count: Int?
+    let enable_routing: Bool?
 }
 
 struct ChatResponse: Codable {

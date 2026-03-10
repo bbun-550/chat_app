@@ -123,7 +123,8 @@ final class ChatViewModel: ObservableObject {
             max_tokens: maxTokens,
             top_p: topP,
             top_k: topK,
-            candidate_count: candidateCount
+            candidate_count: candidateCount,
+            enable_routing: enableRouting ? true : nil
         )
 
         var placeholder = Message(

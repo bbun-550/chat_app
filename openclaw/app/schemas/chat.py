@@ -30,6 +30,7 @@ class ChatRequest(BaseModel):
     top_p: Optional[float] = None
     top_k: Optional[int] = None
     candidate_count: Optional[int] = None
+    enable_routing: bool = False
 
 
 class ChatResponse(BaseModel):
