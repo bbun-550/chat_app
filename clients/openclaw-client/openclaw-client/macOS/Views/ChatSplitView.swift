@@ -69,6 +69,16 @@ struct ChatSplitView: View {
 
             Spacer()
 
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    chatVM.isSearching.toggle()
+                    if !chatVM.isSearching { chatVM.searchText = "" }
+                }
+            } label: {
+                Image(systemName: chatVM.isSearching ? "xmark.circle.fill" : "magnifyingglass")
+            }
+            .buttonStyle(.plain)
+
             if chatVM.isSending {
                 ProgressView().controlSize(.small)
             }
@@ -77,13 +87,34 @@ struct ChatSplitView: View {
     }
     
     private var messageScrollView: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
-                ForEach(chatVM.messages) { message in
-                    MessageBubble(message: message)
+        VStack(spacing: 0) {
+            if chatVM.isSearching {
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search messages...", text: $chatVM.searchText)
+                    if !chatVM.searchText.isEmpty {
+                        Text("\(chatVM.filteredMessages.count) results")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button { chatVM.searchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+                Divider()
             }
-            .padding()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(chatVM.filteredMessages) { message in
+                        MessageBubble(message: message) {
+                            Task { await chatVM.toggleBookmark(message.id) }
+                        }
+                    }
+                }
+                .padding()
+            }
         }
     }
     

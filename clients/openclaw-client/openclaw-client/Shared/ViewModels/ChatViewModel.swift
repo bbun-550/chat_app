@@ -10,6 +10,17 @@ final class ChatViewModel: ObservableObject {
     @Published var isSending = false
     @Published var errorMessage: String?
 
+    @Published var searchText: String = ""
+    @Published var isSearching: Bool = false
+    @Published var enableRouting: Bool = false
+
+    var filteredMessages: [Message] {
+        guard isSearching && !searchText.isEmpty else { return messages }
+        return messages.filter {
+            $0.content.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
     @Published var lastProvider = "-"
     @Published var lastModel = "-"
     @Published var lastLatencyMs = "-"

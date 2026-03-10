@@ -16,6 +16,10 @@ struct ChatDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if chatVM.isSearching {
+                searchBar
+            }
+
             messagesView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -34,6 +38,18 @@ struct ChatDetailView: View {
                     ProgressView()
                 }
             }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        chatVM.isSearching.toggle()
+                        if !chatVM.isSearching {
+                            chatVM.searchText = ""
+                        }
+                    }
+                } label: {
+                    Image(systemName: chatVM.isSearching ? "xmark.circle.fill" : "magnifyingglass")
+                }
+            }
         }
         .task {
             chatVM.bindConversation(conversationId)
@@ -49,13 +65,38 @@ struct ChatDetailView: View {
 
     @State private var viewportHeight: CGFloat = 0
 
+    private var searchBar: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search messages...", text: $chatVM.searchText)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+            if !chatVM.searchText.isEmpty {
+                Button { chatVM.searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+            }
+            if !chatVM.searchText.isEmpty {
+                Text("\(chatVM.filteredMessages.count) results")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+    }
+
     private var messagesView: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(chatVM.messages) { message in
-                        MessageBubbleView(message: message)
-                            .id(message.id)
+                    ForEach(chatVM.filteredMessages) { message in
+                        MessageBubbleView(message: message) {
+                            Task { await chatVM.toggleBookmark(message.id) }
+                        }
+                        .id(message.id)
                     }
                     Color.clear
                         .frame(height: 1)
