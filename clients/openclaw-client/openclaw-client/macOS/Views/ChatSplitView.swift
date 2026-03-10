@@ -141,14 +141,23 @@ private struct ConversationRow: View {
 
 private struct MessageBubble: View {
     let message: Message
+    var onToggleBookmark: (() -> Void)? = nil
 
     private var isUser: Bool { message.role == "user" }
+    private var isBookmarked: Bool { message.is_bookmarked == 1 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(isUser ? "You" : "Assistant")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text(isUser ? "You" : "Assistant")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if isBookmarked {
+                    Image(systemName: "bookmark.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
             Group {
                 if isUser {
                     Text(message.content)
@@ -160,6 +169,21 @@ private struct MessageBubble: View {
             .padding(10)
             .background(.thinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 10))
+            .contextMenu {
+                Button {
+                    NSPasteboard.general.setString(message.content, forType: .string)
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                Button {
+                    onToggleBookmark?()
+                } label: {
+                    Label(
+                        isBookmarked ? "북마크 해제" : "북마크",
+                        systemImage: isBookmarked ? "bookmark.slash" : "bookmark"
+                    )
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }

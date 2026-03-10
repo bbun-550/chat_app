@@ -172,6 +172,17 @@ final class ChatViewModel: ObservableObject {
         isSending = false
     }
 
+    func toggleBookmark(_ messageId: String) async {
+        do {
+            let updated = try await APIClient.shared.toggleBookmark(messageId: messageId)
+            if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+                messages[idx].is_bookmarked = updated.is_bookmarked
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func applyRunStats(_ run: RunStats?) {
         guard let run else { return }
         lastProvider = run.provider

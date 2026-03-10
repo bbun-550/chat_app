@@ -230,16 +230,30 @@ private struct BottomAnchorOffsetKey: PreferenceKey {
 
 private struct MessageBubbleView: View {
     let message: Message
+    var onToggleBookmark: (() -> Void)? = nil
 
     private var isUser: Bool {
         message.role == "user"
     }
 
+    private var isBookmarked: Bool {
+        message.is_bookmarked == 1
+    }
+
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-            Text(isUser ? "You" : "Assistant")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                if isUser { Spacer() }
+                Text(isUser ? "You" : "Assistant")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if isBookmarked {
+                    Image(systemName: "bookmark.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                if !isUser { Spacer() }
+            }
             Group {
                 if isUser {
                     Text(message.content)
@@ -261,6 +275,14 @@ private struct MessageBubbleView: View {
                     #endif
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
+                }
+                Button {
+                    onToggleBookmark?()
+                } label: {
+                    Label(
+                        isBookmarked ? "북마크 해제" : "북마크",
+                        systemImage: isBookmarked ? "bookmark.slash" : "bookmark"
+                    )
                 }
             }
         }

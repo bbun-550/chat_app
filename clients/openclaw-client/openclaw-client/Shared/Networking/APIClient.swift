@@ -187,6 +187,14 @@ extension APIClient {
         return try await request(endpoint: .upsertMessageMeta(messageId: messageId), body: body)
     }
 
+    func toggleBookmark(messageId: String) async throws -> Message {
+        try await request(endpoint: .toggleBookmark(messageId: messageId))
+    }
+
+    func fetchBookmarks() async throws -> [Message] {
+        try await request(endpoint: .bookmarks)
+    }
+
     func fetchProviders() async throws -> [String] {
         try await request(endpoint: .providers)
     }

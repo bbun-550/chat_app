@@ -30,12 +30,15 @@ class Message(Base):
     content = Column(Text, nullable=False)
     model = Column(Text, nullable=False, default="gemini-3-flash-preview")
     created_at = Column(Text, nullable=False)
+    is_bookmarked = Column(Integer, nullable=False, default=0)
 
     conversation = relationship("Conversation", back_populates="messages")
 
     __table_args__ = (
         CheckConstraint("role IN ('user', 'assistant', 'system')"),
+        CheckConstraint("is_bookmarked IN (0, 1)"),
         Index("idx_messages_conv_created", "conversation_id", "created_at"),
+        Index("idx_messages_bookmarked", "is_bookmarked", "created_at"),
     )
 
 

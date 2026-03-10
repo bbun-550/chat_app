@@ -284,6 +284,19 @@ def list_runs(conversation_id: str | None = None):
     return store.list_runs(conversation_id)
 
 
+@router.post("/messages/{message_id}/bookmark")
+def toggle_bookmark(message_id: str):
+    result = store.toggle_bookmark(message_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return result
+
+
+@router.get("/bookmarks")
+def list_bookmarks():
+    return store.list_bookmarked_messages()
+
+
 @router.put("/messages/{message_id}/meta")
 def upsert_message_meta(message_id: str, req: UpsertMessageMetaRequest):
     message = store.get_message(message_id)

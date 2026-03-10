@@ -10,6 +10,10 @@ struct OpenClawIOSApp: App {
                     ChatListView()
                 }
 
+                Tab("Bookmarks", systemImage: "bookmark") {
+                    BookmarksView()
+                }
+
                 Tab("Settings", systemImage: "gear") {
                     NavigationStack {
                         iOSSettingsView()

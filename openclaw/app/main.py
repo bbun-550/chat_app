@@ -34,6 +34,16 @@ app.include_router(events.router)
 @app.on_event("startup")
 def on_startup():
     from app.services.jobs.scheduler import start_scheduler
+    from app.services.db import engine
+    import sqlalchemy
+    with engine.connect() as conn:
+        try:
+            conn.execute(sqlalchemy.text(
+                "ALTER TABLE messages ADD COLUMN is_bookmarked INTEGER NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
     start_scheduler()
 
 

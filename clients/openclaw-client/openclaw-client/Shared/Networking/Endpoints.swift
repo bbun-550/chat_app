@@ -10,6 +10,8 @@ enum Endpoint {
     case chatStream
     case runs(conversationId: String?)
     case upsertMessageMeta(messageId: String)
+    case toggleBookmark(messageId: String)
+    case bookmarks
     case providers
     case providerModels(provider: String)
     case exportConversation(conversationId: String, format: String)
@@ -34,6 +36,10 @@ enum Endpoint {
             return "/runs"
         case .upsertMessageMeta(let messageId):
             return "/messages/\(messageId)/meta"
+        case .toggleBookmark(let messageId):
+            return "/messages/\(messageId)/bookmark"
+        case .bookmarks:
+            return "/bookmarks"
         case .providers:
             return "/providers"
         case .providerModels(let provider):
@@ -50,7 +56,7 @@ enum Endpoint {
 
     var method: String {
         switch self {
-        case .createConversation, .chat, .chatStream:
+        case .createConversation, .chat, .chatStream, .toggleBookmark:
             return "POST"
         case .patchConversation:
             return "PATCH"

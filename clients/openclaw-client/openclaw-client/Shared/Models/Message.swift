@@ -6,4 +6,5 @@ struct Message: Codable, Identifiable, Hashable {
     let role: String
     var content: String
     let created_at: String
+    var is_bookmarked: Int?
 }

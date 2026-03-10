@@ -45,6 +45,7 @@ def _msg_to_dict(m: Message) -> dict:
         "content": m.content,
         "model": m.model,
         "created_at": m.created_at,
+        "is_bookmarked": m.is_bookmarked,
     }
 
 
@@ -209,6 +210,26 @@ def get_message(message_id: str) -> Optional[dict]:
     with get_session() as s:
         m = s.get(Message, message_id)
         return _msg_to_dict(m) if m else None
+
+
+def toggle_bookmark(message_id: str) -> Optional[dict]:
+    with get_session() as s:
+        m = s.get(Message, message_id)
+        if not m:
+            return None
+        m.is_bookmarked = 0 if m.is_bookmarked else 1
+        s.flush()
+        return _msg_to_dict(m)
+
+
+def list_bookmarked_messages() -> list[dict]:
+    with get_session() as s:
+        rows = s.execute(
+            select(Message)
+            .where(Message.is_bookmarked == 1)
+            .order_by(desc(Message.created_at))
+        ).scalars().all()
+        return [_msg_to_dict(r) for r in rows]
 
 
 # ── System Prompts ──
