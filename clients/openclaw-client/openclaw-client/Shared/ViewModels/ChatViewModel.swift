@@ -131,6 +131,18 @@ final class ChatViewModel: ObservableObject {
                     throw APIError.serverError(500, error)
                 }
 
+                // Sync local user message ID with server-persisted ID
+                if let serverUserId = chunk.user_message_id,
+                   let idx = messages.firstIndex(where: { $0.id == localUser.id }) {
+                    messages[idx] = Message(
+                        id: serverUserId,
+                        conversation_id: cid,
+                        role: "user",
+                        content: text,
+                        created_at: messages[idx].created_at
+                    )
+                }
+
                 messages[placeholderIndex].content += chunk.delta
 
                 if chunk.done {
@@ -142,10 +154,19 @@ final class ChatViewModel: ObservableObject {
                 }
             }
         } catch {
+            // Remove empty assistant placeholder
             if messages[placeholderIndex].content.isEmpty {
                 messages.remove(at: placeholderIndex)
             }
+            // Remove optimistic local user message to prevent duplicates on reload
+            if let userIdx = messages.firstIndex(where: { $0.id == localUser.id }) {
+                messages.remove(at: userIdx)
+            }
             errorMessage = error.localizedDescription
+            isSending = false
+            // Reload from server to get actual persisted state
+            await loadMessages()
+            return
         }
 
         isSending = false

@@ -47,6 +47,7 @@ struct StreamedChatChunk: Codable {
     let input_tokens: Int?
     let output_tokens: Int?
     let error: String?
+    let user_message_id: String?
 }
 
 struct APIErrorResponse: Codable {

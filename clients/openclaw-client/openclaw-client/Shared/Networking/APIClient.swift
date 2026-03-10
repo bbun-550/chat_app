@@ -31,6 +31,13 @@ final class APIClient {
         return URLSession(configuration: config)
     }()
 
+    private lazy var streamingSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 600
+        config.timeoutIntervalForResource = 900
+        return URLSession(configuration: config)
+    }()
+
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .useDefaultKeys
@@ -83,6 +90,8 @@ final class APIClient {
             } catch {
                 throw APIError.decodingFailed
             }
+        } catch let urlError as URLError where urlError.code == .timedOut {
+            throw urlError
         } catch {
             if retries > 0 {
                 try await Task.sleep(nanoseconds: 300_000_000)
@@ -142,7 +151,7 @@ extension APIClient {
                     }
                     req.httpBody = try JSONEncoder().encode(requestModel)
 
-                    let (bytes, response) = try await session.bytes(for: req)
+                    let (bytes, response) = try await streamingSession.bytes(for: req)
 
                     guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
                         continuation.finish(throwing: APIError.requestFailed)
