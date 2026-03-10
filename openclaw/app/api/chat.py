@@ -1,6 +1,8 @@
 import json
 import logging
+import queue
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -155,9 +157,46 @@ def send_message_stream(req: ChatRequest):
         full_text = []
         input_tokens = None
         output_tokens = None
+        chunk_queue: queue.Queue = queue.Queue()
+
+        # Send init event with server-side user_message_id for client dedup
+        init_event = {
+            "delta": "",
+            "done": False,
+            "user_message_id": user_message_id,
+        }
+        yield f"data: {json.dumps(init_event, ensure_ascii=False)}\n\n"
+
+        def _stream_worker():
+            try:
+                for chunk in get_llm_router().generate_stream(req.provider, llm_req):
+                    chunk_queue.put(chunk)
+                    if chunk.done:
+                        break
+            except Exception as exc:
+                chunk_queue.put(exc)
+            finally:
+                chunk_queue.put(None)  # sentinel
+
+        executor = ThreadPoolExecutor(max_workers=1)
+        executor.submit(_stream_worker)
 
         try:
-            for chunk in get_llm_router().generate_stream(req.provider, llm_req):
+            while True:
+                try:
+                    item = chunk_queue.get(timeout=15)
+                except queue.Empty:
+                    yield ": heartbeat\n\n"
+                    continue
+
+                if item is None:
+                    break
+                if isinstance(item, Exception):
+                    error_event = {"error": str(item), "done": True}
+                    yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+                    return
+
+                chunk = item
                 if chunk.delta_text:
                     full_text.append(chunk.delta_text)
                 if chunk.input_tokens is not None:
@@ -179,10 +218,12 @@ def send_message_stream(req: ChatRequest):
 
                 if chunk.done:
                     break
-        except Exception as exc:
-            error_event = {"error": str(exc), "done": True}
-            yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+        except GeneratorExit:
+            logger.info("Client disconnected for conversation %s", req.conversation_id)
+            executor.shutdown(wait=False)
             return
+        finally:
+            executor.shutdown(wait=False)
 
         reply_text = "".join(full_text)
         latency_ms = int((time.time() - start) * 1000)
