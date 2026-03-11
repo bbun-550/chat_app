@@ -20,6 +20,8 @@ from app.services.models import (
     KDExample,
     DailySummary,
     VectorMemory,
+    MemoryNode,
+    MemoryEdge,
 )
 
 
@@ -993,3 +995,184 @@ def get_events_after(after_iso: str, limit: int = 100) -> list[dict]:
             .order_by(Event.created_at).limit(limit)
         ).scalars().all()
         return [_event_to_dict(r) for r in rows]
+
+
+# ── Memory Graph ──
+
+
+def _node_to_dict(n: MemoryNode) -> dict:
+    return {
+        "id": n.id, "label": n.label, "node_type": n.node_type,
+        "content": n.content, "metadata_json": n.metadata_json,
+        "source_conversation_id": n.source_conversation_id,
+        "created_at": n.created_at, "updated_at": n.updated_at,
+    }
+
+
+def _edge_to_dict(e: MemoryEdge) -> dict:
+    return {
+        "id": e.id, "source_id": e.source_id, "target_id": e.target_id,
+        "relation_type": e.relation_type, "weight": e.weight,
+        "metadata_json": e.metadata_json, "created_at": e.created_at,
+    }
+
+
+def upsert_memory_node(
+    label: str,
+    node_type: str,
+    content: str,
+    embedding: list[float],
+    metadata: dict | None = None,
+    source_conversation_id: str | None = None,
+) -> str:
+    """Insert or update a memory node by label (upsert)."""
+    now = now_iso()
+    with get_session() as s:
+        existing = s.execute(
+            select(MemoryNode).where(MemoryNode.label == label)
+        ).scalar_one_or_none()
+        if existing:
+            existing.content = content
+            existing.embedding = embedding
+            existing.node_type = node_type
+            existing.metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+            existing.updated_at = now
+            return existing.id
+        node_id = str(uuid.uuid4())
+        s.add(MemoryNode(
+            id=node_id, label=label, node_type=node_type, content=content,
+            embedding=embedding,
+            metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+            source_conversation_id=source_conversation_id,
+            created_at=now, updated_at=now,
+        ))
+        return node_id
+
+
+def insert_memory_edge(
+    source_id: str, target_id: str, relation_type: str,
+    weight: float = 1.0, metadata: dict | None = None,
+) -> str:
+    edge_id = str(uuid.uuid4())
+    with get_session() as s:
+        s.add(MemoryEdge(
+            id=edge_id, source_id=source_id, target_id=target_id,
+            relation_type=relation_type, weight=weight,
+            metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+            created_at=now_iso(),
+        ))
+    return edge_id
+
+
+def search_memory_nodes(
+    embedding: list[float],
+    limit: int = 10,
+    threshold: float = 0.5,
+    node_types: list[str] | None = None,
+) -> list[dict]:
+    """Vector similarity search on memory nodes."""
+    with get_session() as s:
+        distance = MemoryNode.embedding.cosine_distance(embedding)
+        stmt = (
+            select(MemoryNode, distance.label("distance"))
+            .where(distance < (1 - threshold))
+        )
+        if node_types:
+            stmt = stmt.where(MemoryNode.node_type.in_(node_types))
+        stmt = stmt.order_by(distance).limit(limit)
+        rows = s.execute(stmt).all()
+        return [
+            {**_node_to_dict(n), "similarity": 1 - dist}
+            for n, dist in rows
+        ]
+
+
+def get_memory_node_neighbors(
+    node_ids: list[str], relation_types: list[str] | None = None,
+) -> list[dict]:
+    """Get direct neighbors of given nodes (both directions)."""
+    if not node_ids:
+        return []
+    with get_session() as s:
+        # Outgoing edges
+        stmt_out = (
+            select(MemoryEdge, MemoryNode)
+            .join(MemoryNode, MemoryEdge.target_id == MemoryNode.id)
+            .where(MemoryEdge.source_id.in_(node_ids))
+        )
+        # Incoming edges
+        stmt_in = (
+            select(MemoryEdge, MemoryNode)
+            .join(MemoryNode, MemoryEdge.source_id == MemoryNode.id)
+            .where(MemoryEdge.target_id.in_(node_ids))
+        )
+        if relation_types:
+            stmt_out = stmt_out.where(MemoryEdge.relation_type.in_(relation_types))
+            stmt_in = stmt_in.where(MemoryEdge.relation_type.in_(relation_types))
+
+        results = []
+        seen = set(node_ids)
+        for edge, node in list(s.execute(stmt_out).all()) + list(s.execute(stmt_in).all()):
+            if node.id not in seen:
+                seen.add(node.id)
+                results.append({
+                    "node": _node_to_dict(node),
+                    "edge": _edge_to_dict(edge),
+                })
+        return results
+
+
+def get_memory_nodes_by_type_and_date(
+    node_type: str, before: str | None = None, after: str | None = None,
+) -> list[dict]:
+    """Get memory nodes filtered by type and date range."""
+    with get_session() as s:
+        stmt = select(MemoryNode).where(MemoryNode.node_type == node_type)
+        if before:
+            stmt = stmt.where(MemoryNode.created_at < before)
+        if after:
+            stmt = stmt.where(MemoryNode.created_at >= after)
+        stmt = stmt.order_by(desc(MemoryNode.created_at))
+        rows = s.execute(stmt).scalars().all()
+        return [_node_to_dict(n) for n in rows]
+
+
+def count_node_edges(node_id: str) -> int:
+    """Count total edges connected to a node (for deletion protection)."""
+    with get_session() as s:
+        from sqlalchemy import func
+        count = s.execute(
+            select(func.count()).where(
+                (MemoryEdge.source_id == node_id) | (MemoryEdge.target_id == node_id)
+            )
+        ).scalar()
+        return count or 0
+
+
+def delete_memory_nodes(node_ids: list[str]) -> int:
+    """Delete memory nodes (edges cascade-deleted). Returns count deleted."""
+    if not node_ids:
+        return 0
+    with get_session() as s:
+        result = s.execute(
+            delete(MemoryNode).where(MemoryNode.id.in_(node_ids))
+        )
+        return result.rowcount
+
+
+def get_latest_summary_node(
+    node_types: list[str] | None = None,
+) -> dict | None:
+    """Get the most recent summary node, preferring monthly > weekly > daily."""
+    priority = node_types or ["summary_monthly", "summary_weekly", "summary_daily"]
+    with get_session() as s:
+        for nt in priority:
+            row = s.execute(
+                select(MemoryNode)
+                .where(MemoryNode.node_type == nt)
+                .order_by(desc(MemoryNode.created_at))
+                .limit(1)
+            ).scalar_one_or_none()
+            if row:
+                return _node_to_dict(row)
+    return None

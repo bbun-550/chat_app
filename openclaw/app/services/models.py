@@ -134,12 +134,53 @@ class VectorMemory(Base):
 
     id = Column(Text, primary_key=True)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(384), nullable=False)
+    embedding = Column(Vector(1024), nullable=False)
     memory_type = Column(Text, nullable=False, default="fact")
     source_conversation_id = Column(Text, ForeignKey("conversations.id", ondelete="SET NULL"))
     created_at = Column(Text, nullable=False)
 
     __table_args__ = (Index("idx_vector_memories_type", "memory_type", created_at.desc()),)
+
+
+class MemoryNode(Base):
+    __tablename__ = "memory_nodes"
+
+    id = Column(Text, primary_key=True)
+    label = Column(Text, nullable=False)
+    node_type = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding = Column(Vector(1024), nullable=False)
+    metadata_json = Column(Text, nullable=False, default="{}")
+    source_conversation_id = Column(Text, ForeignKey("conversations.id", ondelete="SET NULL"))
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "node_type IN ('entity', 'concept', 'fact', "
+            "'summary_daily', 'summary_weekly', 'summary_monthly')"
+        ),
+        Index("idx_memory_nodes_type", "node_type", created_at.desc()),
+        Index("idx_memory_nodes_label", "label"),
+    )
+
+
+class MemoryEdge(Base):
+    __tablename__ = "memory_edges"
+
+    id = Column(Text, primary_key=True)
+    source_id = Column(Text, ForeignKey("memory_nodes.id", ondelete="CASCADE"), nullable=False)
+    target_id = Column(Text, ForeignKey("memory_nodes.id", ondelete="CASCADE"), nullable=False)
+    relation_type = Column(Text, nullable=False)
+    weight = Column(Float, nullable=False, default=1.0)
+    metadata_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(Text, nullable=False)
+
+    __table_args__ = (
+        Index("idx_memory_edges_source", "source_id"),
+        Index("idx_memory_edges_target", "target_id"),
+        Index("idx_memory_edges_relation", "relation_type"),
+    )
 
 
 class AgentLog(Base):
@@ -208,7 +249,10 @@ class Job(Base):
     updated_at = Column(Text, nullable=False)
 
     __table_args__ = (
-        CheckConstraint("task_type IN ('market_analysis', 'research_report', 'daily_summary')"),
+        CheckConstraint(
+            "task_type IN ('market_analysis', 'research_report', 'daily_summary', "
+            "'memory_daily_summary', 'memory_weekly_summary', 'memory_monthly_summary')"
+        ),
         CheckConstraint("enabled IN (0, 1)"),
         Index("idx_jobs_enabled_next", "enabled", "next_run_at"),
     )
@@ -234,7 +278,8 @@ class Report(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "report_type IN ('market_analysis', 'research_report', 'daily_summary')"
+            "report_type IN ('market_analysis', 'research_report', 'daily_summary', "
+            "'memory_daily_summary', 'memory_weekly_summary', 'memory_monthly_summary')"
         ),
         CheckConstraint("status IN ('pending', 'running', 'completed', 'failed')"),
         Index("idx_reports_type_created", "report_type", created_at.desc()),

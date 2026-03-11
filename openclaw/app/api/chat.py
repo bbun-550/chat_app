@@ -11,7 +11,7 @@ from app.schemas.chat import ChatRequest, ChatResponse, UpsertMessageMetaRequest
 from app.services import store
 from app.services.llm_router import LLMRouter
 from app.services.llm.prompt_builder import build_prompt
-from app.services.memory.vector_store import extract_and_store_memories
+from app.services.memory.graph_store import extract_and_store_graph_memories
 from app.services.memory.summarizer import auto_summarize_if_needed
 from app.services.providers.base import ChatMessage, LLMRequest
 from app.services.llm.intent_classifier import classify_intent
@@ -149,7 +149,7 @@ def send_message(req: ChatRequest):
         router = get_llm_router()
         llm_fn = lambda r: router.generate(req.provider, r)
         messages = store.get_messages(req.conversation_id)
-        extract_and_store_memories(messages, req.conversation_id, llm_generate_fn=llm_fn)
+        extract_and_store_graph_memories(messages, req.conversation_id, llm_generate_fn=llm_fn)
         auto_summarize_if_needed(req.conversation_id, llm_generate_fn=llm_fn)
     except Exception as e:
         logger.warning("Memory extraction failed (non-critical): %s", e)
@@ -347,7 +347,7 @@ def send_message_stream(req: ChatRequest):
             router = get_llm_router()
             llm_fn = lambda r: router.generate(req.provider, r)
             messages = store.get_messages(req.conversation_id)
-            extract_and_store_memories(messages, req.conversation_id, llm_generate_fn=llm_fn)
+            extract_and_store_graph_memories(messages, req.conversation_id, llm_generate_fn=llm_fn)
             auto_summarize_if_needed(req.conversation_id, llm_generate_fn=llm_fn)
         except Exception as e:
             logger.warning("Memory extraction failed (non-critical): %s", e)
