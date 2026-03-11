@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 struct ChatSplitView: View {
     @StateObject private var convVM = ConversationViewModel()
@@ -202,7 +207,11 @@ private struct MessageBubble: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .contextMenu {
                 Button {
+                    #if os(macOS)
                     NSPasteboard.general.setString(message.content, forType: .string)
+                    #elseif os(iOS)
+                    UIPasteboard.general.string = message.content
+                    #endif
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                 }

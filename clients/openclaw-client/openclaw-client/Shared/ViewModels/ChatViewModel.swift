@@ -127,7 +127,7 @@ final class ChatViewModel: ObservableObject {
             enable_routing: enableRouting ? true : nil
         )
 
-        var placeholder = Message(
+        let placeholder = Message(
             id: UUID().uuidString,
             conversation_id: cid,
             role: "assistant",

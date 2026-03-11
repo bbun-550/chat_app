@@ -65,24 +65,34 @@ struct BookmarksView: View {
 private struct BookmarkRowView: View {
     let message: Message
     var onRemove: () -> Void
+    @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Label(
-                    message.role == "user" ? "You" : "Assistant",
-                    systemImage: message.role == "user" ? "person.fill" : "sparkles"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Spacer()
-                Text(message.created_at.prefix(10))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+        DisclosureGroup(isExpanded: $isExpanded) {
+            MarkdownContentView(text: message.content)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label(
+                        message.role == "user" ? "You" : "Assistant",
+                        systemImage: message.role == "user" ? "person.fill" : "sparkles"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(message.created_at.prefix(10))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                if !isExpanded {
+                    Text(message.content)
+                        .lineLimit(2)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Text(message.content)
-                .lineLimit(4)
-                .font(.body)
         }
         .padding(.vertical, 4)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
