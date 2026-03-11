@@ -44,7 +44,36 @@ def on_startup():
             conn.commit()
         except Exception:
             pass  # Column already exists
+    # Migrate embedding dimension (384 → 1024) if needed
+    try:
+        from app.services.memory.migrate_embeddings import migrate_embedding_dimension
+        migrate_embedding_dimension()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Embedding migration skipped: %s", e)
+
     start_scheduler()
+
+    # Register system memory summarization jobs (idempotent)
+    try:
+        from app.services import store as _store
+        from app.services.jobs.scheduler import schedule_job
+        _MEMORY_JOBS = [
+            {"name": "Memory Daily Summary", "task_type": "memory_daily_summary", "cron": "0 2 * * *"},
+            {"name": "Memory Weekly Summary", "task_type": "memory_weekly_summary", "cron": "0 3 * * 1"},
+            {"name": "Memory Monthly Summary", "task_type": "memory_monthly_summary", "cron": "0 4 1 * *"},
+        ]
+        existing_types = {j["task_type"] for j in _store.list_jobs()}
+        for spec in _MEMORY_JOBS:
+            if spec["task_type"] not in existing_types:
+                created = _store.create_job(
+                    name=spec["name"], task_type=spec["task_type"],
+                    cron_expression=spec["cron"],
+                )
+                schedule_job(created["id"], spec["cron"])
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Failed to register memory jobs: %s", e)
 
 
 @app.on_event("shutdown")
